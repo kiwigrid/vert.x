@@ -17,6 +17,9 @@
 package org.vertx.java.core.http.impl;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
+import io.netty.buffer.Unpooled;
+
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.buffer.Buffer;
 import org.vertx.java.core.eventbus.Message;
@@ -31,137 +34,153 @@ import java.net.InetSocketAddress;
 import java.util.UUID;
 
 /**
- *
+ * 
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
 
-  private final String textHandlerID;
-  private final String binaryHandlerID;
-  private final VertxInternal vertx;
-  protected final ConnectionBase conn;
+	private final String textHandlerID;
+	private final String binaryHandlerID;
+	private final VertxInternal vertx;
+	protected final ConnectionBase conn;
 
-  protected Handler<WebSocketFrame> frameHandler;
-  protected Handler<Buffer> dataHandler;
-  protected Handler<Void> drainHandler;
-  protected Handler<Throwable> exceptionHandler;
-  protected Handler<Void> closeHandler;
-  protected Handler<Void> endHandler;
-  protected Handler<Message<Buffer>> binaryHandler;
-  protected Handler<Message<String>> textHandler;
-  protected boolean closed;
+	protected Handler<WebSocketFrame> frameHandler;
+	protected Handler<Buffer> dataHandler;
+	protected Handler<Void> drainHandler;
+	protected Handler<Throwable> exceptionHandler;
+	protected Handler<Void> closeHandler;
+	protected Handler<Void> endHandler;
+	protected Handler<Message<Buffer>> binaryHandler;
+	protected Handler<Message<String>> textHandler;
+	protected boolean closed;
 
-  protected WebSocketImplBase(VertxInternal vertx, ConnectionBase conn) {
-    this.vertx = vertx;
-    this.textHandlerID = UUID.randomUUID().toString();
-    this.binaryHandlerID = UUID.randomUUID().toString();
-    this.conn = conn;
-    binaryHandler = new Handler<Message<Buffer>>() {
-      public void handle(Message<Buffer> msg) {
-        writeBinaryFrameInternal(msg.body());
-      }
-    };
-    vertx.eventBus().registerLocalHandler(binaryHandlerID, binaryHandler);
-    textHandler = new Handler<Message<String>>() {
-      public void handle(Message<String> msg) {
-        writeTextFrameInternal(msg.body());
-      }
-    };
-    vertx.eventBus().registerLocalHandler(textHandlerID, textHandler);
-  }
+	private CompositeByteBuf wsFramesCollector;
 
-  public String binaryHandlerID() {
-    return binaryHandlerID;
-  }
+	protected WebSocketImplBase(VertxInternal vertx, ConnectionBase conn) {
+		this.vertx = vertx;
+		this.textHandlerID = UUID.randomUUID().toString();
+		this.binaryHandlerID = UUID.randomUUID().toString();
+		this.conn = conn;
+		wsFramesCollector = Unpooled.compositeBuffer();
+		binaryHandler = new Handler<Message<Buffer>>() {
+			public void handle(Message<Buffer> msg) {
+				writeBinaryFrameInternal(msg.body());
+			}
+		};
+		vertx.eventBus().registerLocalHandler(binaryHandlerID, binaryHandler);
+		textHandler = new Handler<Message<String>>() {
+			public void handle(Message<String> msg) {
+				writeTextFrameInternal(msg.body());
+			}
+		};
+		vertx.eventBus().registerLocalHandler(textHandlerID, textHandler);
+	}
 
-  public String textHandlerID() {
-    return textHandlerID;
-  }
+	public String binaryHandlerID() {
+		return binaryHandlerID;
+	}
 
-  public boolean writeQueueFull() {
-    checkClosed();
-    return conn.doWriteQueueFull();
-  }
+	public String textHandlerID() {
+		return textHandlerID;
+	}
 
-  public void close() {
-    checkClosed();
-    conn.close();
-    cleanupHandlers();
-  }
+	public boolean writeQueueFull() {
+		checkClosed();
+		return conn.doWriteQueueFull();
+	}
 
-  @Override
-  public InetSocketAddress localAddress() {
-    return conn.localAddress();
-  }
+	public void close() {
+		checkClosed();
+		conn.close();
+		cleanupHandlers();
+	}
 
-  @Override
-  public InetSocketAddress remoteAddress() {
-    return conn.remoteAddress();
-  }
+	@Override
+	public InetSocketAddress localAddress() {
+		return conn.localAddress();
+	}
 
-  protected void writeBinaryFrameInternal(Buffer data) {
-    ByteBuf buf = data.getByteBuf();
-    WebSocketFrame frame = new DefaultWebSocketFrame(WebSocketFrame.FrameType.BINARY, buf);
-    writeFrame(frame);
-  }
+	@Override
+	public InetSocketAddress remoteAddress() {
+		return conn.remoteAddress();
+	}
 
-  protected void writeTextFrameInternal(String str) {
-    WebSocketFrame frame = new DefaultWebSocketFrame(str);
-    writeFrame(frame);
-  }
+	protected void writeBinaryFrameInternal(Buffer data) {
+		ByteBuf buf = data.getByteBuf();
+		WebSocketFrame frame = new DefaultWebSocketFrame(
+				WebSocketFrame.FrameType.BINARY, buf);
+		writeFrame(frame);
+	}
 
+	protected void writeTextFrameInternal(String str) {
+		WebSocketFrame frame = new DefaultWebSocketFrame(str);
+		writeFrame(frame);
+	}
 
-  private void cleanupHandlers() {
-    if (!closed) {
-      vertx.eventBus().unregisterHandler(binaryHandlerID, binaryHandler);
-      vertx.eventBus().unregisterHandler(textHandlerID, textHandler);
-      closed = true;
-    }
-  }
+	private void cleanupHandlers() {
+		if (!closed) {
+			vertx.eventBus().unregisterHandler(binaryHandlerID, binaryHandler);
+			vertx.eventBus().unregisterHandler(textHandlerID, textHandler);
+			closed = true;
+		}
+	}
 
-  protected void writeFrame(WebSocketFrame frame) {
-    checkClosed();
-    conn.write(frame);
-  }
+	protected void writeFrame(WebSocketFrame frame) {
+		checkClosed();
+		conn.write(frame);
+	}
 
-  protected void checkClosed() {
-    if (closed) {
-      throw new IllegalStateException("WebSocket is closed");
-    }
-  }
+	protected void checkClosed() {
+		if (closed) {
+			throw new IllegalStateException("WebSocket is closed");
+		}
+	}
 
-  void handleFrame(WebSocketFrameInternal frame) {
-    if (dataHandler != null) {
-      Buffer buff = new Buffer(frame.getBinaryData());
-      dataHandler.handle(buff);
-    }
+	void handleFrame(WebSocketFrameInternal frame) {
+		if (dataHandler != null) {
+			switch (frame.type()) {
+			case PING:
+			case PONG:
+			case CLOSE:
+			case TEXT:
+			case BINARY:
+				wsFramesCollector.clear();
+			case CONTINUATION:
+				wsFramesCollector.addComponent(frame.getBinaryData());
+			}
+			if (frame.isFinalFrame()) {
+				wsFramesCollector.writerIndex(wsFramesCollector.capacity());
+				Buffer buff = new Buffer(wsFramesCollector);
+				dataHandler.handle(buff);
+			}
+		}
 
-    if (frameHandler != null) {
-      frameHandler.handle(frame);
-    }
-  }
+		if (frameHandler != null) {
+			frameHandler.handle(frame);
+		}
+	}
 
-  void writable() {
-    if (drainHandler != null) {
-      Handler<Void> dh = drainHandler;
-      drainHandler = null;
-      dh.handle(null);
-    }
-  }
+	void writable() {
+		if (drainHandler != null) {
+			Handler<Void> dh = drainHandler;
+			drainHandler = null;
+			dh.handle(null);
+		}
+	}
 
-  void handleException(Throwable t) {
-    if (exceptionHandler != null) {
-      exceptionHandler.handle(t);
-    }
-  }
+	void handleException(Throwable t) {
+		if (exceptionHandler != null) {
+			exceptionHandler.handle(t);
+		}
+	}
 
-  void handleClosed() {
-    cleanupHandlers();
-    if (endHandler != null) {
-      endHandler.handle(null);
-    }
-    if (closeHandler != null) {
-      closeHandler.handle(null);
-    }
-  }
+	void handleClosed() {
+		cleanupHandlers();
+		if (endHandler != null) {
+			endHandler.handle(null);
+		}
+		if (closeHandler != null) {
+			closeHandler.handle(null);
+		}
+	}
 }
