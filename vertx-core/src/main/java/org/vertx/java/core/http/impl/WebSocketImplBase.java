@@ -145,6 +145,7 @@ public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
 			case TEXT:
 			case BINARY:
 				wsFramesCollector.clear();
+				wsFramesCollector.removeComponents(0, wsFramesCollector.numComponents());
 			case CONTINUATION:
 				wsFramesCollector.addComponent(frame.getBinaryData());
 			}
