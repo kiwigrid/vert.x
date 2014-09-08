@@ -17,6 +17,9 @@
 package org.vertx.java.core.http.impl;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
+import io.netty.buffer.Unpooled;
+
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.buffer.Buffer;
 import org.vertx.java.core.eventbus.Message;
@@ -27,14 +30,29 @@ import org.vertx.java.core.http.impl.ws.WebSocketFrameInternal;
 import org.vertx.java.core.impl.VertxInternal;
 import org.vertx.java.core.net.impl.ConnectionBase;
 
+import antlr.CharBuffer;
+
+import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 /**
- *
+ * 
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
+
+  /**
+   * size of the websocket chunk. This is the default value, maybe should be
+   * made configurable
+   */
+  private static final int CHUNK_SIZE = 65536;
 
   private final String textHandlerID;
   private final String binaryHandlerID;
@@ -51,11 +69,14 @@ public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
   protected Handler<Message<String>> textHandler;
   protected boolean closed;
 
+  private CompositeByteBuf wsFramesCollector;
+
   protected WebSocketImplBase(VertxInternal vertx, ConnectionBase conn) {
     this.vertx = vertx;
     this.textHandlerID = UUID.randomUUID().toString();
     this.binaryHandlerID = UUID.randomUUID().toString();
     this.conn = conn;
+    wsFramesCollector = Unpooled.compositeBuffer();
     binaryHandler = new Handler<Message<Buffer>>() {
       public void handle(Message<Buffer> msg) {
         writeBinaryFrameInternal(msg.body());
@@ -100,16 +121,103 @@ public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
   }
 
   protected void writeBinaryFrameInternal(Buffer data) {
-    ByteBuf buf = data.getByteBuf();
-    WebSocketFrame frame = new DefaultWebSocketFrame(WebSocketFrame.FrameType.BINARY, buf);
-    writeFrame(frame);
+    if (data != null && data.getBytes() != null) {
+      byte[][] chunks = chunkMessage(data.getBytes());
+      for (int i = 0; i < chunks.length; i++) {
+        boolean finalFrame = i == chunks.length - 1;
+        WebSocketFrame.FrameType frameType = i == 0 ? WebSocketFrame.FrameType.BINARY : WebSocketFrame.FrameType.CONTINUATION;
+        WebSocketFrame frame = new DefaultWebSocketFrame(frameType, Unpooled.copiedBuffer(chunks[i]), finalFrame);
+        writeFrame(frame);
+      }
+    } else {
+      WebSocketFrame frame = new DefaultWebSocketFrame(WebSocketFrame.FrameType.BINARY);
+      writeFrame(frame);
+    }
   }
 
-  protected void writeTextFrameInternal(String str) {
-    WebSocketFrame frame = new DefaultWebSocketFrame(str);
-    writeFrame(frame);
+  protected void writeTextFrameInternal(String data) {
+    if (data != null && !data.isEmpty()) {
+      List<String> chunks = chunkMessage(data);
+      for (int i = 0; i < chunks.size(); i++) {
+        boolean finalFrame = i == chunks.size() - 1;
+        WebSocketFrame frame;
+        if (i == 0) {
+          frame = new DefaultWebSocketFrame(chunks.get(i), finalFrame);
+        } else {
+          try {
+            frame = new DefaultWebSocketFrame(WebSocketFrame.FrameType.CONTINUATION, Unpooled.copiedBuffer(chunks.get(i).getBytes("UTF-8")),
+                finalFrame);
+          } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
+          }
+        }
+        writeFrame(frame);
+      }
+    } else {
+      WebSocketFrame frame = new DefaultWebSocketFrame(WebSocketFrame.FrameType.TEXT);
+      writeFrame(frame);
+    }
   }
 
+  /**
+   * @param message
+   *          the message to be chunked. Is assumed to be non-empty string
+   * @return bytes array with the message chunks
+   */
+  byte[][] chunkMessage(byte[] messageBytes) {
+    byte[][] resChunks = new byte[messageBytes.length / CHUNK_SIZE + 1][];
+    for (int chunkIndex = 0; chunkIndex < resChunks.length; chunkIndex++) {
+      resChunks[chunkIndex] = Arrays.copyOfRange(messageBytes, chunkIndex * CHUNK_SIZE, Math.min((chunkIndex + 1) * CHUNK_SIZE, messageBytes.length));
+    }
+    return resChunks;
+  }
+
+  List<String> chunkMessage(String str) {
+    int offset = 0;
+    List<String> chunks = new ArrayList<>();
+    while (offset < str.length()) {
+      String chunk = getUTF8LongestPrefix(str.substring(offset), CHUNK_SIZE);
+      chunks.add(chunk);
+      offset += chunk.length();
+    }
+    return chunks;
+  }
+
+  String getUTF8LongestPrefix(String str, int bytesLengthLimit) {
+    int prefixLengthInBytes = 0;
+    int currentIndex = 0;
+    while (prefixLengthInBytes <= bytesLengthLimit && currentIndex < str.length()) {
+      int cp = str.codePointAt(currentIndex);
+      prefixLengthInBytes += getBytesAmountForUTF8Encoding(cp);
+      if (Character.isSupplementaryCodePoint(cp))
+        currentIndex += 2;
+      else
+        currentIndex++;
+    }
+    return str.substring(0, currentIndex - (currentIndex < str.length() ? 1 : 0));
+  }
+
+  /**
+   * @param codePoint
+   *          the codePoint
+   * @return amount of bytes that are needed to encode the specified codePoint
+   *         with UTF-8 scheme (rfc 3629)
+   */
+  private int getBytesAmountForUTF8Encoding(int codePoint) {
+    /*
+     * input data is not checked since it is a private method, and the code
+     * point is guaranteed to be of the valid value
+     */
+    if (codePoint < 0x0080)
+      return 1;
+    else if (codePoint < 0x0800)
+      return 2;
+    else if (codePoint < 0x00010000)
+      return 3;
+    else if (codePoint < 0x00110000)
+      return 4;
+    throw new IllegalArgumentException("The code point must be in the range 0x0000 to 0x0010FFFF");
+  }
 
   private void cleanupHandlers() {
     if (!closed) {
@@ -132,8 +240,22 @@ public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
 
   void handleFrame(WebSocketFrameInternal frame) {
     if (dataHandler != null) {
-      Buffer buff = new Buffer(frame.getBinaryData());
-      dataHandler.handle(buff);
+      switch (frame.type()) {
+      case PING:
+      case PONG:
+      case CLOSE:
+      case TEXT:
+      case BINARY:
+        wsFramesCollector.clear();
+        wsFramesCollector.removeComponents(0, wsFramesCollector.numComponents());
+      case CONTINUATION:
+        wsFramesCollector.addComponent(frame.getBinaryData());
+      }
+      if (frame.isFinalFrame()) {
+        wsFramesCollector.writerIndex(wsFramesCollector.capacity());
+        Buffer buff = new Buffer(wsFramesCollector);
+        dataHandler.handle(buff);
+      }
     }
 
     if (frameHandler != null) {
