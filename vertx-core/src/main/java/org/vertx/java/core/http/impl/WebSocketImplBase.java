@@ -31,6 +31,7 @@ import org.vertx.java.core.impl.VertxInternal;
 import org.vertx.java.core.net.impl.ConnectionBase;
 
 import java.net.InetSocketAddress;
+import java.util.Arrays;
 import java.util.UUID;
 
 /**
@@ -38,6 +39,12 @@ import java.util.UUID;
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
+
+	/**
+	 * size of the websocket chunk. This is the default value, maybe should be
+	 * made configurable
+	 */
+	private static final int CHUNK_SIZE = 65536;
 
 	private final String textHandlerID;
 	private final String binaryHandlerID;
@@ -106,15 +113,41 @@ public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
 	}
 
 	protected void writeBinaryFrameInternal(Buffer data) {
-		ByteBuf buf = data.getByteBuf();
-		WebSocketFrame frame = new DefaultWebSocketFrame(
-				WebSocketFrame.FrameType.BINARY, buf);
-		writeFrame(frame);
+		if (data != null && data.getBytes() != null) {
+			byte[][] chunks = chunkMessage(data.getBytes());
+			for (int i = 0; i < chunks.length; i++) {
+				boolean finalFrame = i == chunks.length - 1;
+				WebSocketFrame.FrameType frameType = i == 0 ? WebSocketFrame.FrameType.BINARY
+						: WebSocketFrame.FrameType.CONTINUATION;
+				WebSocketFrame frame = new DefaultWebSocketFrame(frameType,
+						Unpooled.copiedBuffer(chunks[i]), finalFrame);
+				writeFrame(frame);
+			}
+		} else {
+			ByteBuf buf = data.getByteBuf();
+			WebSocketFrame frame = new DefaultWebSocketFrame(
+					WebSocketFrame.FrameType.BINARY, buf);
+			writeFrame(frame);
+		}
 	}
 
 	protected void writeTextFrameInternal(String str) {
-		WebSocketFrame frame = new DefaultWebSocketFrame(str);
-		writeFrame(frame);
+		writeBinaryFrameInternal(new Buffer(str));
+	}
+
+	/**
+	 * @param message
+	 *            the message to be chunked. Is assumed to be non-empty string
+	 * @return bytes array with the message chunks
+	 */
+	byte[][] chunkMessage(byte[] messageBytes) {
+		byte[][] resChunks = new byte[messageBytes.length / CHUNK_SIZE + 1][];
+		for (int chunkIndex = 0; chunkIndex < resChunks.length; chunkIndex++) {
+			resChunks[chunkIndex] = Arrays.copyOfRange(messageBytes, chunkIndex
+					* CHUNK_SIZE, Math.min((chunkIndex + 1) * CHUNK_SIZE,
+					messageBytes.length));
+		}
+		return resChunks;
 	}
 
 	private void cleanupHandlers() {
@@ -145,7 +178,8 @@ public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
 			case TEXT:
 			case BINARY:
 				wsFramesCollector.clear();
-				wsFramesCollector.removeComponents(0, wsFramesCollector.numComponents());
+				wsFramesCollector.removeComponents(0,
+						wsFramesCollector.numComponents());
 			case CONTINUATION:
 				wsFramesCollector.addComponent(frame.getBinaryData());
 			}
