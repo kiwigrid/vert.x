@@ -134,8 +134,7 @@ public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
 	}
 
 	protected void writeTextFrameInternal(String str) {
-		writeBinaryFrameInternal(new Buffer(Unpooled.copiedBuffer(str,
-				CharsetUtil.UTF_8)));
+		writeBinaryFrameInternal(new Buffer(str));
 	}
 
 	/**
