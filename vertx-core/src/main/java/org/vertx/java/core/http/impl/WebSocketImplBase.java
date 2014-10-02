@@ -19,12 +19,14 @@ package org.vertx.java.core.http.impl;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.util.CharsetUtil;
 
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.buffer.Buffer;
 import org.vertx.java.core.eventbus.Message;
 import org.vertx.java.core.http.WebSocketBase;
 import org.vertx.java.core.http.WebSocketFrame;
+import org.vertx.java.core.http.WebSocketFrame.FrameType;
 import org.vertx.java.core.http.impl.ws.DefaultWebSocketFrame;
 import org.vertx.java.core.http.impl.ws.WebSocketFrameInternal;
 import org.vertx.java.core.impl.VertxInternal;
@@ -132,7 +134,8 @@ public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
 	}
 
 	protected void writeTextFrameInternal(String str) {
-		writeBinaryFrameInternal(new Buffer(str));
+		writeBinaryFrameInternal(new Buffer(Unpooled.copiedBuffer(str,
+				CharsetUtil.UTF_8)));
 	}
 
 	/**
