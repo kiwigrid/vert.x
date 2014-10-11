@@ -36,4 +36,13 @@ public interface ChoosableIterable<T> extends Iterable<T>{
    * @return The next element
    */
   T choose();
+  
+  
+  /**
+   * Check if in item is present in the iterator
+   * 
+   * @param item
+   * @return true if the item is present
+   */
+  boolean contains(T item);
 }
