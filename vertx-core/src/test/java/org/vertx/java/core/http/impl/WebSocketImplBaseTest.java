@@ -1,50 +1,25 @@
 package org.vertx.java.core.http.impl;
 
-import io.netty.buffer.ByteBuf;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.EventLoopGroup;
 
 import java.io.UnsupportedEncodingException;
-import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ExecutorService;
 
 import org.junit.Before;
 import org.junit.Test;
-import org.vertx.java.core.AsyncResult;
-import org.vertx.java.core.Context;
 import org.vertx.java.core.Handler;
-import org.vertx.java.core.Vertx;
 import org.vertx.java.core.buffer.Buffer;
-import org.vertx.java.core.datagram.DatagramSocket;
-import org.vertx.java.core.datagram.InternetProtocolFamily;
-import org.vertx.java.core.dns.DnsClient;
-import org.vertx.java.core.eventbus.EventBus;
-import org.vertx.java.core.file.FileSystem;
-import org.vertx.java.core.http.HttpClient;
-import org.vertx.java.core.http.HttpServer;
 import org.vertx.java.core.http.WebSocketFrame;
 import org.vertx.java.core.http.impl.ws.DefaultWebSocketFrame;
 import org.vertx.java.core.http.impl.ws.WebSocketFrameInternal;
-import org.vertx.java.core.impl.DefaultContext;
 import org.vertx.java.core.impl.DefaultVertx;
-import org.vertx.java.core.impl.EventLoopContext;
-import org.vertx.java.core.impl.VertxInternal;
-import org.vertx.java.core.net.NetClient;
-import org.vertx.java.core.net.NetServer;
 import org.vertx.java.core.net.impl.ConnectionBase;
-import org.vertx.java.core.net.impl.DefaultNetServer;
-import org.vertx.java.core.net.impl.ServerID;
-import org.vertx.java.core.shareddata.SharedData;
-import org.vertx.java.core.sockjs.SockJSServer;
-import org.vertx.java.core.spi.Action;
-import org.vertx.java.core.spi.cluster.ClusterManager;
-
-import static org.junit.Assert.*;
 
 public class WebSocketImplBaseTest {
 
@@ -79,19 +54,73 @@ public class WebSocketImplBaseTest {
    * - several multi-frame messages are sent -> handle on the dataHandler is
    * invoked once per complete message
    * 
-   * Sending message:
+
    * 
-   * - sending null message ->
+   * === getUTF8LongestPrefix ===
    * 
-   * - sending an empty binary message ->
+   * - str.length == limit -> one complete string
    * 
-   * - sending one small binary message ->
+   * - str.length == limit, but the last char is a two bytes char (in utf-8) ->
+   * string without the last char
    * 
-   * - sending several small binary message ->
+   * - str.length == limit - 1 -> complete string
    * 
-   * - sending one large binary messages ->
+   * - str.length == limit - 1, but the last char is a two bytes char (in utf-8)
+   * -> complete string
    * 
-   * - sending several large binary messages ->
+   * - str.length == limit + 1 -> prefix of the length limit
+   * 
+   * === chunkMessage(String) ===
+   * 
+   * - str.length == 0 -> zero length string
+   * 
+   * - str.length == chunk_size - 1 -> one item list
+   * 
+   * - str.length == chunk size -> one item list
+   * 
+   * - str.length == chunk_size + 1 -> two items list
+   * 
+   * 
+   * === writeTextFrameInternal ===
+   * 
+   * - sending null message -> an empty final text frame is sent
+   * 
+   * - sending an empty message -> an empty final text frame is sent
+   * 
+   * - sending one text message. msg.length = chunk_size - 1 -> one final frame
+   * is sent
+   * 
+   * - sending several final text messages. msg.length = chunk_size -> several
+   * final frames are written
+   * 
+   * - sending several text messages. msg.length == chunk_size + 1 -> non-final,
+   * final, non-final, final
+   * 
+   * 
+   * === chunkMessage(byte[]) ===
+   * 
+   * - array.length == 0 -> zero length string
+   * 
+   * - array.length == chunk_size - 1 -> one item list
+   * 
+   * - array.length == chunk size -> one item list
+   * 
+   * - array.length == chunk_size + 1 -> two items list
+   * 
+   * === writeBinaryFrameInternal ===
+   * 
+   * - sending null message -> an empty final binary frame is sent
+   * 
+   * - sending an empty message -> an empty final binary frame is sent
+   * 
+   * - sending one text message. msg.length = chunk_size - 1 -> one final binary
+   * frame is sent
+   * 
+   * - sending several final text messages. msg.length = chunk_size -> several
+   * final binary frames are written
+   * 
+   * - sending several binary messages. msg.length == chunk_size + 1 ->
+   * non-final, final, non-final, final
    * 
    */
 
@@ -179,11 +208,217 @@ public class WebSocketImplBaseTest {
   }
 
   @Test
-  public void testWriteTextFrameInternal_oneSmallMessage() throws UnsupportedEncodingException {
-    webSocketImplBase.writeTextFrameInternal("test_frameä");
+  public void testGetUTF8LongestPrefix_messageLengthEqualsLimit() {
+    String prefix = webSocketImplBase.getUTF8LongestPrefix("abc", 3);
+    assertEquals("abc", prefix);
+  }
+
+  @Test
+  public void testGetUTF8LongestPrefix_messageLengthEqualsLimitLastCharacterTwoBytes() {
+    String prefix = webSocketImplBase.getUTF8LongestPrefix("abcä", 4);
+    assertEquals("abc", prefix);
+  }
+
+  @Test
+  public void testGetUTF8LongestPrefix_messageLengthEqualsLimitMinusOne() {
+    String prefix = webSocketImplBase.getUTF8LongestPrefix("abc", 4);
+    assertEquals("abc", prefix);
+  }
+
+  @Test
+  public void testGetUTF8LongestPrefix_messageLengthEqualsLimitMinusOneLastCharTwoBytes() {
+    String prefix = webSocketImplBase.getUTF8LongestPrefix("abcä", 5);
+    assertEquals("abcä", prefix);
+  }
+
+  @Test
+  public void testGetUTF8LongestPrefix_messageLengthEqualsLimitPlusOne() {
+    String prefix = webSocketImplBase.getUTF8LongestPrefix("abcd", 3);
+    assertEquals("abc", prefix);
+  }
+
+  @Test
+  public void testWriteTextFrameInternal_nullMessage() throws UnsupportedEncodingException {
+    webSocketImplBase.writeTextFrameInternal(null);
     assertEquals(1, ((MockConnection) webSocketImplBase.conn).writtenObjects.size());
     DefaultWebSocketFrame wsFrame = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(0);
-    assertEquals("test_frameä", wsFrame.textData());
+    assertTrue(wsFrame.isFinalFrame());
+    assertEquals("", wsFrame.textData());
+  }
+
+  @Test
+  public void testWriteTextFrameInternal_emptyMessage() throws UnsupportedEncodingException {
+    webSocketImplBase.writeTextFrameInternal("");
+    assertEquals(1, ((MockConnection) webSocketImplBase.conn).writtenObjects.size());
+    DefaultWebSocketFrame wsFrame = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(0);
+    assertTrue(wsFrame.isFinalFrame());
+    assertEquals("", wsFrame.textData());
+  }
+
+  @Test
+  public void testWriteTextFrameInternal_messageLengthEqualsChunkMinusOne() throws UnsupportedEncodingException {
+    webSocketImplBase.setChunkSize(4);
+    webSocketImplBase.writeTextFrameInternal("abc");
+    assertEquals(1, ((MockConnection) webSocketImplBase.conn).writtenObjects.size());
+    DefaultWebSocketFrame wsFrame = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(0);
+    assertTrue(wsFrame.isFinalFrame());
+    assertEquals("abc", wsFrame.textData());
+  }
+
+  @Test
+  public void testWriteTextFrameInternal_severalMessagesLengthEqualsChunk() throws UnsupportedEncodingException {
+    webSocketImplBase.setChunkSize(3);
+    webSocketImplBase.writeTextFrameInternal("abc");
+    webSocketImplBase.writeTextFrameInternal("def");
+    assertEquals(2, ((MockConnection) webSocketImplBase.conn).writtenObjects.size());
+    DefaultWebSocketFrame wsFrame = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(0);
+    assertTrue(wsFrame.isFinalFrame());
+    assertEquals("abc", wsFrame.textData());
+    DefaultWebSocketFrame wsFrame1 = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(1);
+    assertTrue(wsFrame1.isFinalFrame());
+    assertEquals("def", wsFrame1.textData());
+  }
+
+  @Test
+  public void testWriteTextFrameInternal_severalMessagesLengthEqualsChunkPlusOne() throws UnsupportedEncodingException {
+    webSocketImplBase.setChunkSize(3);
+    webSocketImplBase.writeTextFrameInternal("abcd");
+    webSocketImplBase.writeTextFrameInternal("efgh");
+    assertEquals(4, ((MockConnection) webSocketImplBase.conn).writtenObjects.size());
+    DefaultWebSocketFrame wsFrame = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(0);
+    assertTrue(!wsFrame.isFinalFrame());
+    assertEquals("abc", wsFrame.textData());
+    DefaultWebSocketFrame wsFrame1 = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(1);
+    assertTrue(wsFrame1.isFinalFrame());
+    assertEquals("d", wsFrame1.textData());
+
+    DefaultWebSocketFrame wsFrame3 = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(2);
+    assertTrue(!wsFrame3.isFinalFrame());
+    assertEquals("efg", wsFrame3.textData());
+    DefaultWebSocketFrame wsFrame4 = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(3);
+    assertTrue(wsFrame4.isFinalFrame());
+    assertEquals("h", wsFrame4.textData());
+  }
+
+  @Test
+  public void testChunkMessageString_emptyString() {
+    List<String> chunks = webSocketImplBase.chunkMessage("");
+    assertTrue(chunks.isEmpty());
+  }
+
+  @Test
+  public void testChunkMessageString_stringLengthEqualsChunkSizeMinusOne() {
+    webSocketImplBase.setChunkSize(4);
+    List<String> chunks = webSocketImplBase.chunkMessage("abc");
+    assertEquals("abc", chunks.get(0));
+  }
+
+  @Test
+  public void testChunkMessageString_stringLengthEqualsChunkSize() {
+    webSocketImplBase.setChunkSize(4);
+    List<String> chunks = webSocketImplBase.chunkMessage("abcd");
+    assertEquals("abcd", chunks.get(0));
+  }
+
+  @Test
+  public void testChunkMessageString_stringLengthEqualsChunkSizePlusOne() {
+    webSocketImplBase.setChunkSize(4);
+    List<String> chunks = webSocketImplBase.chunkMessage("abcde");
+    assertEquals("abcd", chunks.get(0));
+    assertEquals("e", chunks.get(1));
+  }
+
+  @Test
+  public void testChunkMessageBytes_emptyArray() {
+    byte[][] chunks = webSocketImplBase.chunkMessage(new byte[0]);
+    assertEquals(0, chunks.length);
+  }
+
+  @Test
+  public void testChunkMessageBytes_stringLengthEqualsChunkSizeMinusOne() {
+    webSocketImplBase.setChunkSize(4);
+    byte[][] chunks = webSocketImplBase.chunkMessage(new byte[] { (byte) 0, (byte) 1, (byte) 2 });
+    assertTrue(Arrays.equals(new byte[] { (byte) 0, (byte) 1, (byte) 2 }, chunks[0]));
+  }
+
+  @Test
+  public void testChunkMessageBytes_stringLengthEqualsChunkSize() {
+    webSocketImplBase.setChunkSize(4);
+    byte[][] chunks = webSocketImplBase.chunkMessage(new byte[] { (byte) 0, (byte) 1, (byte) 2, (byte) 3 });
+    assertEquals(1, chunks.length);
+    assertTrue(Arrays.equals(new byte[] { (byte) 0, (byte) 1, (byte) 2, (byte) 3 }, chunks[0]));
+  }
+
+  @Test
+  public void testChunkMessageBytes_stringLengthEqualsChunkSizePlusOne() {
+    webSocketImplBase.setChunkSize(3);
+    byte[][] chunks = webSocketImplBase.chunkMessage(new byte[] { (byte) 0, (byte) 1, (byte) 2, (byte) 3 });
+    assertEquals(2, chunks.length);
+    assertTrue(Arrays.equals(new byte[] { (byte) 0, (byte) 1, (byte) 2 }, chunks[0]));
+    assertTrue(Arrays.equals(new byte[] { (byte) 3 }, chunks[1]));
+  }
+
+  @Test
+  public void testWriteBinaryFrameInternal_nullMessage() throws UnsupportedEncodingException {
+    webSocketImplBase.writeBinaryFrameInternal(null);
+    assertEquals(1, ((MockConnection) webSocketImplBase.conn).writtenObjects.size());
+    DefaultWebSocketFrame wsFrame = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(0);
+    assertTrue(wsFrame.isFinalFrame());
+    assertEquals("", wsFrame.textData());
+  }
+
+  @Test
+  public void testWriteBinaryFrameInternal_emptyMessage() throws UnsupportedEncodingException {
+    webSocketImplBase.writeBinaryFrameInternal(new Buffer());
+    assertEquals(1, ((MockConnection) webSocketImplBase.conn).writtenObjects.size());
+    DefaultWebSocketFrame wsFrame = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(0);
+    assertTrue(wsFrame.isFinalFrame());
+    assertEquals("", wsFrame.textData());
+  }
+
+  @Test
+  public void testWriteBinaryFrameInternal_messageLengthEqualsChunkMinusOne() throws UnsupportedEncodingException {
+    webSocketImplBase.setChunkSize(4);
+    webSocketImplBase.writeBinaryFrameInternal(new Buffer("abc"));
+    assertEquals(1, ((MockConnection) webSocketImplBase.conn).writtenObjects.size());
+    DefaultWebSocketFrame wsFrame = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(0);
+    assertTrue(wsFrame.isFinalFrame());
+    assertEquals("abc", wsFrame.textData());
+  }
+
+  @Test
+  public void testWriteBinaryFrameInternal_severalMessagesLengthEqualsChunk() throws UnsupportedEncodingException {
+    webSocketImplBase.setChunkSize(3);
+    webSocketImplBase.writeBinaryFrameInternal(new Buffer("abc"));
+    webSocketImplBase.writeBinaryFrameInternal(new Buffer("def"));
+    assertEquals(2, ((MockConnection) webSocketImplBase.conn).writtenObjects.size());
+    DefaultWebSocketFrame wsFrame = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(0);
+    assertTrue(wsFrame.isFinalFrame());
+    assertEquals("abc", wsFrame.textData());
+    DefaultWebSocketFrame wsFrame1 = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(1);
+    assertTrue(wsFrame1.isFinalFrame());
+    assertEquals("def", wsFrame1.textData());
+  }
+
+  @Test
+  public void testWriteBinaryFrameInternal_severalMessagesLengthEqualsChunkPlusOne() throws UnsupportedEncodingException {
+    webSocketImplBase.setChunkSize(3);
+    webSocketImplBase.writeBinaryFrameInternal(new Buffer("abcd"));
+    webSocketImplBase.writeBinaryFrameInternal(new Buffer("efgh"));
+    assertEquals(4, ((MockConnection) webSocketImplBase.conn).writtenObjects.size());
+    DefaultWebSocketFrame wsFrame = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(0);
+    assertTrue(!wsFrame.isFinalFrame());
+    assertEquals("abc", wsFrame.textData());
+    DefaultWebSocketFrame wsFrame1 = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(1);
+    assertTrue(wsFrame1.isFinalFrame());
+    assertEquals("d", wsFrame1.textData());
+
+    DefaultWebSocketFrame wsFrame3 = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(2);
+    assertTrue(!wsFrame3.isFinalFrame());
+    assertEquals("efg", wsFrame3.textData());
+    DefaultWebSocketFrame wsFrame4 = (DefaultWebSocketFrame) ((MockConnection) webSocketImplBase.conn).writtenObjects.get(3);
+    assertTrue(wsFrame4.isFinalFrame());
+    assertEquals("h", wsFrame4.textData());
   }
 
   private static class MockDataHandler implements Handler<Buffer> {

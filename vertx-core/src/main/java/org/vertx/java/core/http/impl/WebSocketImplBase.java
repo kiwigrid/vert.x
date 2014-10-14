@@ -46,7 +46,9 @@ public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
    * size of the websocket chunk. This is the default value, maybe should be
    * made configurable
    */
-  private static final int CHUNK_SIZE = 65536;
+  private static final int DEFAULT_CHUNK_SIZE = 65536;
+
+  private int chunkSize = DEFAULT_CHUNK_SIZE;
 
   private final String textHandlerID;
   private final String binaryHandlerID;
@@ -115,7 +117,7 @@ public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
   }
 
   protected void writeBinaryFrameInternal(Buffer data) {
-    if (data != null && data.getBytes() != null) {
+    if (data != null && data.getBytes() != null && data.getBytes().length != 0) {
       byte[][] chunks = chunkMessage(data.getBytes());
       for (int i = 0; i < chunks.length; i++) {
         boolean finalFrame = i == chunks.length - 1;
@@ -159,36 +161,54 @@ public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
    * @return bytes array with the message chunks
    */
   byte[][] chunkMessage(byte[] messageBytes) {
-    byte[][] resChunks = new byte[messageBytes.length / CHUNK_SIZE + 1][];
+    byte[][] resChunks = new byte[messageBytes.length / chunkSize + (messageBytes.length % chunkSize > 0 ? 1 : 0)][];
     for (int chunkIndex = 0; chunkIndex < resChunks.length; chunkIndex++) {
-      resChunks[chunkIndex] = Arrays.copyOfRange(messageBytes, chunkIndex * CHUNK_SIZE, Math.min((chunkIndex + 1) * CHUNK_SIZE, messageBytes.length));
+      resChunks[chunkIndex] = Arrays.copyOfRange(messageBytes, chunkIndex * chunkSize, Math.min((chunkIndex + 1) * chunkSize, messageBytes.length));
     }
     return resChunks;
   }
 
+  /**
+   * splits the provided string into chunks of byte lengths not exceding the
+   * CHUNK_SIZE
+   * 
+   * @param str
+   *          the string to be splitted. Is assumed to be a not-null string
+   * 
+   * @return list of chunks
+   */
   List<String> chunkMessage(String str) {
     int offset = 0;
     List<String> chunks = new ArrayList<>();
     while (offset < str.length()) {
-      String chunk = getUTF8LongestPrefix(str.substring(offset), CHUNK_SIZE);
+      String chunk = getUTF8LongestPrefix(str.substring(offset), chunkSize);
       chunks.add(chunk);
       offset += chunk.length();
     }
     return chunks;
   }
 
+  /**
+   * 
+   * @param str
+   *          the string. It is assumed to be a non-empty string
+   * @param bytesLengthLimit
+   *          size limit of the prefix. It is assumed to be non-negative integer
+   * @return the longest prefix that does not exceed the bytesLengthLimit when
+   *         encoded with UTF-8 scheme
+   */
   String getUTF8LongestPrefix(String str, int bytesLengthLimit) {
     int prefixLengthInBytes = 0;
     int currentIndex = 0;
     while (prefixLengthInBytes <= bytesLengthLimit && currentIndex < str.length()) {
       int cp = str.codePointAt(currentIndex);
       prefixLengthInBytes += getBytesAmountForUTF8Encoding(cp);
-      if (Character.isSupplementaryCodePoint(cp))
-        currentIndex += 2;
-      else
+      if (!Character.isSupplementaryCodePoint(cp))
         currentIndex++;
+      else
+        currentIndex += 2;
     }
-    return str.substring(0, currentIndex - (currentIndex < str.length() ? 1 : 0));
+    return str.substring(0, currentIndex - (prefixLengthInBytes > bytesLengthLimit ? 1 : 0));
   }
 
   /**
@@ -279,5 +299,13 @@ public abstract class WebSocketImplBase<T> implements WebSocketBase<T> {
     if (closeHandler != null) {
       closeHandler.handle(null);
     }
+  }
+
+  public int getChunkSize() {
+    return chunkSize;
+  }
+
+  public void setChunkSize(int chunkSize) {
+    this.chunkSize = chunkSize;
   }
 }
