@@ -84,4 +84,9 @@ class ChoosableSet<T> implements ChoosableIterable<T> {
       return null;
     }
   }
+
+  @Override
+  public boolean contains(T item) {
+    return ids.contains(item);
+  }
 }
