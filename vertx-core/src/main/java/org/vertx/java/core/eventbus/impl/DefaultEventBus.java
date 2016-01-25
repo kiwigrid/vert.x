@@ -16,6 +16,7 @@
 
 package org.vertx.java.core.eventbus.impl;
 
+import org.slf4j.MDC;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
 import org.vertx.java.core.Handler;
@@ -44,6 +45,7 @@ import org.vertx.java.core.spi.cluster.ChoosableIterable;
 import org.vertx.java.core.spi.cluster.ClusterManager;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -58,12 +60,12 @@ import java.util.concurrent.atomic.AtomicLong;
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public class DefaultEventBus implements EventBus {
-	
+
   public enum LoadBalanceMode {
 	  RoundRobin,
 	  PreferLocal
   }
-  
+
   public static final String VERTX_CLUSTER_LOADBALANCE = "vertx.cluster.loadbalancing";
 
   private static final Logger log = LoggerFactory.getLogger(DefaultEventBus.class);
@@ -89,7 +91,7 @@ public class DefaultEventBus implements EventBus {
     this.server = null;
     this.subs = null;
     this.clusterMgr = null;
-    ManagementRegistry.registerEventBus(serverID);    
+    ManagementRegistry.registerEventBus(serverID);
   }
 
   public DefaultEventBus(VertxInternal vertx, int port, String hostname, ClusterManager clusterManager) {
@@ -104,7 +106,7 @@ public class DefaultEventBus implements EventBus {
     this.server = setServer(port, hostname, listenHandler);
     setLoadBalanceMode();
   }
-  
+
   private void setLoadBalanceMode() {
 	  try {
 		  this.loadBalanceMode = LoadBalanceMode.valueOf(System.getProperty(VERTX_CLUSTER_LOADBALANCE, LoadBalanceMode.RoundRobin.name()));
@@ -740,7 +742,7 @@ public class DefaultEventBus implements EventBus {
                 ChoosableIterable<ServerID> serverIDs = event.result();
                 if (serverIDs != null && !serverIDs.isEmpty()) {
                   if(message.send
-                	 && loadBalanceMode == LoadBalanceMode.PreferLocal 
+                	 && loadBalanceMode == LoadBalanceMode.PreferLocal
                      && serverIDs.contains(serverID)) {
                 	// stay in this node
                 	receiveMessage(message, fTimeoutID, asyncResultHandler, replyHandler);
@@ -973,7 +975,19 @@ public class DefaultEventBus implements EventBus {
         // before it was received
         try {
           if (!holder.removed) {
-            holder.handler.handle(copied);
+            Map<String, String> save = MDC.getCopyOfContextMap();
+            try {
+              MDC.clear();
+              if (holder.mdcValues != null && !holder.mdcValues.isEmpty()) {
+                MDC.setContextMap(holder.mdcValues);
+              }
+              holder.handler.handle(copied);
+            } finally {
+              MDC.clear();
+              if (save != null && !save.isEmpty()) {
+                MDC.setContextMap(save);
+              }
+            }
           }
         } finally {
           if (holder.replyHandler) {
@@ -997,6 +1011,7 @@ public class DefaultEventBus implements EventBus {
     final boolean localOnly;
     final long timeoutID;
     boolean removed;
+    final Map<String, String> mdcValues;
 
     HandlerHolder(Handler<Message<T>> handler, boolean replyHandler, boolean localOnly, DefaultContext context, long timeoutID) {
       this.context = context;
@@ -1004,6 +1019,7 @@ public class DefaultEventBus implements EventBus {
       this.replyHandler = replyHandler;
       this.localOnly = localOnly;
       this.timeoutID = timeoutID;
+      mdcValues = MDC.getCopyOfContextMap();
     }
 
     @Override

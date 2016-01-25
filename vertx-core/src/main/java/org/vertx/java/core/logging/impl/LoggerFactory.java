@@ -43,7 +43,7 @@ public class LoggerFactory {
     // programmatically - this is primarily of use so we can configure the logger delegate on the client side.
     // call to System.getProperty is wrapped in a try block as it will fail if the client runs in a secured
     // environment
-    String className = JULLogDelegateFactory.class.getName();
+    String className = SLF4JLogDelegateFactory.class.getName();
     try {
       className = System.getProperty(LOGGER_DELEGATE_FACTORY_CLASS_NAME);
     } catch (Exception e) {
@@ -58,7 +58,7 @@ public class LoggerFactory {
         throw new IllegalArgumentException("Error instantiating transformer class \"" + className + "\"", e);
       }
     } else {
-      delegateFactory = new JULLogDelegateFactory();
+      delegateFactory = new SLF4JLogDelegateFactory();
     }
 
     LoggerFactory.delegateFactory = delegateFactory;

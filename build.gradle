@@ -33,7 +33,7 @@ buildscript {
   dependencies {
     classpath 'com.eriwen:gradle-js-plugin:1.1'
   }
-} 
+}
 
 apply plugin: 'js'
 
@@ -43,18 +43,18 @@ allprojects {
 
   configurations {
     platform
-  } 
+  }
 }
 
 subprojects {
   apply plugin: 'java'
-  
+
   sourceCompatibility = '1.7'
   targetCompatibility = '1.7'
 
   defaultTasks = ['classes']
   group = rootProject.group
-  
+
   repositories {
     if (System.getenv("VERTX_DISABLE_MAVENLOCAL") == null) {
       mavenLocal()
@@ -62,7 +62,7 @@ subprojects {
     maven { url 'https://oss.sonatype.org/content/repositories/snapshots' }
     mavenCentral()
   }
-  
+
   dependencies {
     testCompile "junit:junit:$junitVersion"
     testCompile "io.vertx:vertx-testframework:$testframeworkversion", {
@@ -74,7 +74,7 @@ subprojects {
       exclude group: "junit"
     }
   }
-  
+
   javadoc {
     destinationDir = file("build/docs/java/api")
     options.encoding = 'UTF-8'
@@ -132,10 +132,10 @@ task assemble(type: Copy, dependsOn: [subprojects.assemble]) {
   }
 
   into('lib') {
-    from subprojects.configurations.compile    
+    from subprojects.configurations.compile
     from subprojects.jar
     // Don't just include everything!!
-    includes = ["jackson*.jar", "netty*.jar", "hazelcast*.jar", "vertx*.jar"]
+    includes = ["jackson*.jar", "netty*.jar", "hazelcast*.jar", "vertx*.jar", "*slf4j*.jar", "*logback*.jar", "fluent-logger*.jar"]
   }
   doLast {
     project.ant.chmod(file: "build/$rootProject.name-$version/bin", perm: 'ugo+x')
