@@ -36,7 +36,7 @@ import java.util.concurrent.Executor;
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public abstract class DefaultContext implements Context {
-  public static boolean isMDCAware = Boolean.parseBoolean(System.getProperty("MDC_AWARE", "true"));
+  public static boolean isMDCAware = Boolean.parseBoolean(System.getProperty("vertx.logger.mdcaware", "false"));
   private static final Logger log = LoggerFactory.getLogger(DefaultContext.class);
 
   protected final VertxInternal vertx;
