@@ -56,21 +56,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- *
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public class DefaultEventBus implements EventBus {
 
   public enum LoadBalanceMode {
-	  RoundRobin,
-	  PreferLocal
+    RoundRobin,
+    PreferLocal
   }
 
   public static final String VERTX_CLUSTER_LOADBALANCE = "vertx.cluster.loadbalancing";
 
   private static final Logger log = LoggerFactory.getLogger(DefaultEventBus.class);
 
-  private static final Buffer PONG = new Buffer(new byte[] { (byte)1 });
+  private static final Buffer PONG = new Buffer(new byte[]{(byte) 1});
   private static final long PING_INTERVAL = 20000;
   private static final long PING_REPLY_INTERVAL = 20000;
   private final VertxInternal vertx;
@@ -108,12 +107,12 @@ public class DefaultEventBus implements EventBus {
   }
 
   private void setLoadBalanceMode() {
-	  try {
-		  this.loadBalanceMode = LoadBalanceMode.valueOf(System.getProperty(VERTX_CLUSTER_LOADBALANCE, LoadBalanceMode.RoundRobin.name()));
-		  log.info("cluster loadbalancing mode: " + this.loadBalanceMode);
-	  } catch (IllegalArgumentException e) {
-		  log.error("invalid load balance mode: " + System.getProperty(VERTX_CLUSTER_LOADBALANCE, LoadBalanceMode.RoundRobin.name()));
-	  }
+    try {
+      this.loadBalanceMode = LoadBalanceMode.valueOf(System.getProperty(VERTX_CLUSTER_LOADBALANCE, LoadBalanceMode.RoundRobin.name()));
+      log.info("cluster loadbalancing mode: " + this.loadBalanceMode);
+    } catch (IllegalArgumentException e) {
+      log.error("invalid load balance mode: " + System.getProperty(VERTX_CLUSTER_LOADBALANCE, LoadBalanceMode.RoundRobin.name()));
+    }
   }
 
   @Override
@@ -462,7 +461,7 @@ public class DefaultEventBus implements EventBus {
 
   @Override
   public EventBus registerHandler(String address, Handler<? extends Message> handler,
-                              Handler<AsyncResult<Void>> completionHandler) {
+                                  Handler<AsyncResult<Void>> completionHandler) {
     registerHandler(address, handler, completionHandler, false, false, -1);
     return this;
   }
@@ -524,12 +523,12 @@ public class DefaultEventBus implements EventBus {
 
   @Override
   public void close(Handler<AsyncResult<Void>> doneHandler) {
-		if (clusterMgr != null) {
-			clusterMgr.leave();
-		}
-		if (server != null) {
-			server.close(doneHandler);
-		}
+    if (clusterMgr != null) {
+      clusterMgr.leave();
+    }
+    if (server != null) {
+      server.close(doneHandler);
+    }
   }
 
   @Override
@@ -559,31 +558,31 @@ public class DefaultEventBus implements EventBus {
   static <U> BaseMessage<U> createMessage(boolean send, String address, U message) {
     BaseMessage bm;
     if (message instanceof String) {
-      bm = new StringMessage(send, address, (String)message);
+      bm = new StringMessage(send, address, (String) message);
     } else if (message instanceof Buffer) {
-      bm = new BufferMessage(send, address, (Buffer)message);
+      bm = new BufferMessage(send, address, (Buffer) message);
     } else if (message instanceof JsonObject) {
-      bm = new JsonObjectMessage(send, address, (JsonObject)message);
+      bm = new JsonObjectMessage(send, address, (JsonObject) message);
     } else if (message instanceof JsonArray) {
-      bm = new JsonArrayMessage(send, address, (JsonArray)message);
+      bm = new JsonArrayMessage(send, address, (JsonArray) message);
     } else if (message instanceof byte[]) {
-      bm = new ByteArrayMessage(send, address, (byte[])message);
+      bm = new ByteArrayMessage(send, address, (byte[]) message);
     } else if (message instanceof Integer) {
-      bm = new IntMessage(send, address, (Integer)message);
+      bm = new IntMessage(send, address, (Integer) message);
     } else if (message instanceof Long) {
-      bm = new LongMessage(send, address, (Long)message);
+      bm = new LongMessage(send, address, (Long) message);
     } else if (message instanceof Float) {
-      bm = new FloatMessage(send, address, (Float)message);
+      bm = new FloatMessage(send, address, (Float) message);
     } else if (message instanceof Double) {
-      bm = new DoubleMessage(send, address, (Double)message);
+      bm = new DoubleMessage(send, address, (Double) message);
     } else if (message instanceof Boolean) {
-      bm = new BooleanMessage(send, address, (Boolean)message);
+      bm = new BooleanMessage(send, address, (Boolean) message);
     } else if (message instanceof Short) {
-      bm = new ShortMessage(send, address, (Short)message);
+      bm = new ShortMessage(send, address, (Short) message);
     } else if (message instanceof Character) {
-      bm = new CharacterMessage(send, address, (Character)message);
+      bm = new CharacterMessage(send, address, (Character) message);
     } else if (message instanceof Byte) {
-      bm = new ByteMessage(send, address, (Byte)message);
+      bm = new ByteMessage(send, address, (Byte) message);
     } else if (message == null) {
       bm = new StringMessage(send, address, null);
     } else {
@@ -598,6 +597,7 @@ public class DefaultEventBus implements EventBus {
         final RecordParser parser = RecordParser.newFixed(4, null);
         Handler<Buffer> handler = new Handler<Buffer>() {
           int size = -1;
+
           public void handle(Buffer buff) {
             if (size == -1) {
               size = buff.getInt(0);
@@ -636,7 +636,7 @@ public class DefaultEventBus implements EventBus {
         }
         if (listenHandler != null) {
           if (asyncResult.succeeded()) {
-            listenHandler.handle(new DefaultFutureResult<>((Void)null));
+            listenHandler.handle(new DefaultFutureResult<>((Void) null));
           } else {
             listenHandler.handle(new DefaultFutureResult<Void>(asyncResult.cause()));
           }
@@ -741,13 +741,13 @@ public class DefaultEventBus implements EventBus {
               if (event.succeeded()) {
                 ChoosableIterable<ServerID> serverIDs = event.result();
                 if (serverIDs != null && !serverIDs.isEmpty()) {
-                  if(message.send
-                	 && loadBalanceMode == LoadBalanceMode.PreferLocal
-                     && serverIDs.contains(serverID)) {
-                	// stay in this node
-                	receiveMessage(message, fTimeoutID, asyncResultHandler, replyHandler);
+                  if (message.send
+                      && loadBalanceMode == LoadBalanceMode.PreferLocal
+                      && serverIDs.contains(serverID)) {
+                    // stay in this node
+                    receiveMessage(message, fTimeoutID, asyncResultHandler, replyHandler);
                   } else {
-                	sendToSubs(serverIDs, message, fTimeoutID, asyncResultHandler, replyHandler);
+                    sendToSubs(serverIDs, message, fTimeoutID, asyncResultHandler, replyHandler);
                   }
                 } else {
                   receiveMessage(message, fTimeoutID, asyncResultHandler, replyHandler);
@@ -779,7 +779,7 @@ public class DefaultEventBus implements EventBus {
         DefaultFutureResult<Message<T>> result;
         if (reply.body() instanceof ReplyException) {
           // This is kind of clunky - but hey-ho
-          result = new DefaultFutureResult<>((ReplyException)reply.body());
+          result = new DefaultFutureResult<>((ReplyException) reply.body());
         } else {
           result = new DefaultFutureResult<>(reply);
         }
@@ -895,8 +895,7 @@ public class DefaultEventBus implements EventBus {
       if (prevHolder != null) {
         // Another one sneaked in
         holder = prevHolder;
-      }
-      else {
+      } else {
         holder.connect(client, theServerID);
       }
     }
@@ -937,7 +936,7 @@ public class DefaultEventBus implements EventBus {
         }
       } else {
         // Publish
-        for (HandlerHolder holder: handlers.list) {
+        for (HandlerHolder holder : handlers.list) {
           doReceive(msg, holder);
         }
       }
@@ -975,6 +974,10 @@ public class DefaultEventBus implements EventBus {
         // before it was received
         try {
           if (!holder.removed) {
+            if (!DefaultContext.isMDCAware) {
+              holder.handler.handle(copied);
+              return;
+            }
             Map<String, String> save = MDC.getCopyOfContextMap();
             try {
               MDC.clear();
@@ -1005,13 +1008,14 @@ public class DefaultEventBus implements EventBus {
   }
 
   private static class HandlerHolder<T> {
+    private static boolean isMDCAware = Boolean.parseBoolean(System.getProperty("MDC_AWARE", "true"));
     final DefaultContext context;
     final Handler<Message<T>> handler;
     final boolean replyHandler;
     final boolean localOnly;
     final long timeoutID;
     boolean removed;
-    final Map<String, String> mdcValues;
+    Map<String, String> mdcValues;
 
     HandlerHolder(Handler<Message<T>> handler, boolean replyHandler, boolean localOnly, DefaultContext context, long timeoutID) {
       this.context = context;
@@ -1019,7 +1023,9 @@ public class DefaultEventBus implements EventBus {
       this.replyHandler = replyHandler;
       this.localOnly = localOnly;
       this.timeoutID = timeoutID;
-      mdcValues = MDC.getCopyOfContextMap();
+      if (isMDCAware) {
+        mdcValues = MDC.getCopyOfContextMap();
+      }
     }
 
     @Override
@@ -1109,6 +1115,7 @@ public class DefaultEventBus implements EventBus {
 
     final List<HandlerHolder> list = new CopyOnWriteArrayList<>();
     final AtomicInteger pos = new AtomicInteger(0);
+
     HandlerHolder choose() {
       while (true) {
         int size = list.size();
@@ -1158,7 +1165,7 @@ public class DefaultEventBus implements EventBus {
     // Called by context on undeploy
     public void close(Handler<AsyncResult<Void>> doneHandler) {
       unregisterHandler(this.address, this.handler);
-      doneHandler.handle(new DefaultFutureResult<>((Void)null));
+      doneHandler.handle(new DefaultFutureResult<>((Void) null));
     }
   }
 }

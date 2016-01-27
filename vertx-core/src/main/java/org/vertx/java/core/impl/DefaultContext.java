@@ -36,7 +36,7 @@ import java.util.concurrent.Executor;
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public abstract class DefaultContext implements Context {
-
+  public static boolean isMDCAware = Boolean.parseBoolean(System.getProperty("MDC_AWARE", "true"));
   private static final Logger log = LoggerFactory.getLogger(DefaultContext.class);
 
   protected final VertxInternal vertx;
@@ -197,13 +197,19 @@ public abstract class DefaultContext implements Context {
   }
 
   private static abstract class MDCAwareRunnable implements Runnable {
-    private final Map<String, String> values;
+    private Map<String, String> values;
 
     public MDCAwareRunnable() {
-      values = MDC.getCopyOfContextMap();
+      if (isMDCAware) {
+        values = MDC.getCopyOfContextMap();
+      }
     }
 
     public void run() {
+      if (!isMDCAware) {
+        invoke();
+        return;
+      }
       Map<String, String> save = MDC.getCopyOfContextMap();
       try {
         MDC.clear();
