@@ -17,8 +17,6 @@
 package org.vertx.java.platform.impl;
 
 import org.vertx.java.core.impl.ConcurrentHashSet;
-import org.vertx.java.core.logging.Logger;
-import org.vertx.java.core.logging.impl.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -50,13 +48,11 @@ import java.util.*;
  */
 public class ModuleClassLoader extends URLClassLoader {
 
-  private static final Logger log = LoggerFactory.getLogger(ModuleClassLoader.class);
-
   public final String modID;
   private final Set<ModuleReference> references = new ConcurrentHashSet<>();
   private final ClassLoader platformClassLoader;
   private final boolean loadFromModuleFirst;
-  private Set<ModuleClassLoader> modGraph;
+  private volatile Set<ModuleClassLoader> modGraph;
 
   public ModuleClassLoader(String modID, ClassLoader platformClassLoader, URL[] classpath,
                            boolean loadFromModuleFirst) {
@@ -158,9 +154,15 @@ public class ModuleClassLoader extends URLClassLoader {
 
   private Set<ModuleClassLoader> getModuleGraph() {
     if (modGraph == null) {
-      modGraph = new ConcurrentHashSet<ModuleClassLoader>();
-      modGraph.add(this);
-      computeModules(modGraph);
+      synchronized (this) {
+        if (modGraph != null) {
+          return modGraph;
+        }
+        Set<ModuleClassLoader> graph = new LinkedHashSet<>();
+        graph.add(this);
+        computeModules(graph);
+        modGraph = graph;
+      }
     }
     return modGraph;
   }
@@ -234,80 +236,4 @@ public class ModuleClassLoader extends URLClassLoader {
       }
     }
   }
-
-  private static final class LinkedHashSet<T> implements Set<T> {
-
-    private final Object obj = new Object();
-
-    private final Map<T, Object> map = new LinkedHashMap<>();
-
-    @Override
-    public int size() {
-      return map.size();
-    }
-
-    @Override
-    public boolean isEmpty() {
-      return map.isEmpty();
-    }
-
-    @Override
-    public boolean contains(Object o) {
-      return map.containsKey(o);
-    }
-
-    @Override
-    public Iterator<T> iterator() {
-      return map.keySet().iterator();
-    }
-
-    @Override
-    public Object[] toArray() {
-      return map.keySet().toArray();
-    }
-
-    @Override
-    public <T1> T1[] toArray(T1[] a) {
-      return map.keySet().toArray(a);
-    }
-
-    @Override
-    public boolean add(T t) {
-      map.put(t, obj);
-      return true;
-    }
-
-    @Override
-    public boolean remove(Object o) {
-      return map.remove(o) != null;
-    }
-
-    @Override
-    public boolean containsAll(Collection<?> c) {
-      return map.keySet().containsAll(c);
-    }
-
-    @Override
-    public boolean addAll(Collection<? extends T> c) {
-      return false;
-    }
-
-    @Override
-    public boolean retainAll(Collection<?> c) {
-      return false;
-    }
-
-    @Override
-    public boolean removeAll(Collection<?> c) {
-      return false;
-    }
-
-    @Override
-    public void clear() {
-      map.clear();
-    }
-
-  }
-
-
 }
