@@ -52,7 +52,7 @@ public class ModuleClassLoader extends URLClassLoader {
   private final Set<ModuleReference> references = new ConcurrentHashSet<>();
   private final ClassLoader platformClassLoader;
   private final boolean loadFromModuleFirst;
-  private Set<ModuleClassLoader> modGraph;
+  private volatile Set<ModuleClassLoader> modGraph;
 
   public ModuleClassLoader(String modID, ClassLoader platformClassLoader, URL[] classpath,
                            boolean loadFromModuleFirst) {
