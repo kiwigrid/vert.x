@@ -69,6 +69,16 @@ subprojects {
     if (System.getenv("VERTX_DISABLE_MAVENLOCAL") == null) {
       mavenLocal()
     }
+    if (System.getenv("VERTX_ADDITIONAL_MAVEN_REPO") != null) {
+      maven {
+        name "additionalVertxRepo"
+        url System.getenv("VERTX_ADDITIONAL_MAVEN_REPO")
+        credentials {
+          username System.getenv("VERTX_ADDITIONAL_MAVEN_REPO_USER")
+          password System.getenv("VERTX_ADDITIONAL_MAVEN_REPO_PASSWORD")
+        }
+      }
+    }
     maven { url 'https://oss.sonatype.org/content/repositories/snapshots' }
     mavenCentral()
   }
