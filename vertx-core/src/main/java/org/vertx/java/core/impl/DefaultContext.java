@@ -18,6 +18,7 @@ package org.vertx.java.core.impl;
 
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
+import org.slf4j.MDC;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
 import org.vertx.java.core.Context;
@@ -27,6 +28,7 @@ import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 
@@ -34,7 +36,7 @@ import java.util.concurrent.Executor;
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public abstract class DefaultContext implements Context {
-
+  public static boolean isMDCAware = Boolean.parseBoolean(System.getProperty("vertx.logger.mdcaware", "false"));
   private static final Logger log = LoggerFactory.getLogger(DefaultContext.class);
 
   protected final VertxInternal vertx;
@@ -105,7 +107,7 @@ public abstract class DefaultContext implements Context {
       final CountingCompletionHandler<Void> aggHandler = new CountingCompletionHandler<>(vertx, closeHooks.size());
       aggHandler.setHandler(doneHandler);
       // Copy to avoid ConcurrentModificationException
-      for (Closeable hook: new HashSet<>(closeHooks)) {
+      for (Closeable hook : new HashSet<>(closeHooks)) {
         try {
           hook.close(new AsyncResultHandler<Void>() {
             @Override
@@ -122,7 +124,7 @@ public abstract class DefaultContext implements Context {
         }
       }
     } else {
-      doneHandler.handle(new DefaultFutureResult<>((Void)null));
+      doneHandler.handle(new DefaultFutureResult<>((Void) null));
     }
   }
 
@@ -130,17 +132,22 @@ public abstract class DefaultContext implements Context {
 
   public abstract boolean isOnCorrectWorker(EventLoop worker);
 
-  public void execute(EventLoop worker, Runnable handler) {
+  public void execute(EventLoop worker, final Runnable handler) {
     if (isOnCorrectWorker(worker)) {
       wrapTask(handler).run();
     } else {
-      execute(handler);
+      execute(new MDCAwareRunnable() {
+        @Override
+        void invoke() {
+          handler.run();
+        }
+      });
     }
   }
 
   public void runOnContext(final Handler<Void> task) {
-    execute(new Runnable() {
-      public void run() {
+    execute(new MDCAwareRunnable() {
+      public void invoke() {
         task.handle(null);
       }
     });
@@ -166,8 +173,8 @@ public abstract class DefaultContext implements Context {
   }
 
   protected Runnable wrapTask(final Runnable task) {
-    return new Runnable() {
-      public void run() {
+    return new MDCAwareRunnable() {
+      public void invoke() {
         Thread currentThread = Thread.currentThread();
         String threadName = currentThread.getName();
         try {
@@ -187,6 +194,38 @@ public abstract class DefaultContext implements Context {
         }
       }
     };
+  }
+
+  private static abstract class MDCAwareRunnable implements Runnable {
+    private Map<String, String> values;
+
+    public MDCAwareRunnable() {
+      if (isMDCAware) {
+        values = MDC.getCopyOfContextMap();
+      }
+    }
+
+    public void run() {
+      if (!isMDCAware) {
+        invoke();
+        return;
+      }
+      Map<String, String> save = MDC.getCopyOfContextMap();
+      try {
+        MDC.clear();
+        if (values != null && !values.isEmpty()) {
+          MDC.setContextMap(values);
+        }
+        invoke();
+      } finally {
+        MDC.clear();
+        if (save != null && !save.isEmpty()) {
+          MDC.setContextMap(save);
+        }
+      }
+    }
+
+    abstract void invoke();
   }
 
 }
