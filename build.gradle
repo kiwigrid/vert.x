@@ -155,7 +155,7 @@ task assemble(type: Copy, dependsOn: [subprojects.assemble]) {
     from subprojects.configurations.compile
     from subprojects.jar
     // Don't just include everything!!
-    includes = ["jackson*.jar", "netty*.jar", "hazelcast*.jar", "vertx*.jar", "*slf4j*.jar", "*logback*.jar", "fluent-logger*.jar"]
+    includes = ["jackson*.jar", "netty*.jar", "hazelcast*.jar", "vertx*.jar", "*slf4j*.jar", "*logback*.jar", "fluent-logger*.jar", "*msgpack*jar"]
   }
   doLast {
     project.ant.chmod(file: "build/$rootProject.name-$version/bin", perm: 'ugo+x')
@@ -226,6 +226,3 @@ task release(dependsOn: ['clean', 'test', 'dist']) {
   group = 'vert.x'
   description 'Clean and fully test the current version before creating the distribution'
 }
-
-
-
