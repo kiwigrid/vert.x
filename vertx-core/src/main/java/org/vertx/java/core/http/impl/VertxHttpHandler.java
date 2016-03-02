@@ -15,6 +15,8 @@
  */
 package org.vertx.java.core.http.impl;
 
+import java.util.Map;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufHolder;
@@ -28,15 +30,12 @@ import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.websocketx.*;
-import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import org.vertx.java.core.http.impl.ws.DefaultWebSocketFrame;
 import org.vertx.java.core.http.impl.ws.WebSocketFrameInternal;
 import org.vertx.java.core.impl.DefaultContext;
 import org.vertx.java.core.impl.VertxInternal;
 import org.vertx.java.core.net.impl.ConnectionBase;
 import org.vertx.java.core.net.impl.VertxHandler;
-
-import java.util.Map;
 
 /**
  * @author <a href="mailto:nmaurer@redhat.com">Norman Maurer</a>
@@ -142,22 +141,22 @@ public abstract class VertxHttpHandler<C extends ConnectionBase> extends VertxHa
       }
       switch (frame.type()) {
         case BINARY:
-          msg = new BinaryWebSocketFrame(buf);
+          msg = new BinaryWebSocketFrame(frame.isFinalFrame(), 0, buf);
           break;
         case TEXT:
-          msg = new TextWebSocketFrame(buf);
+          msg = new TextWebSocketFrame(frame.isFinalFrame(), 0, buf);
           break;
         case CLOSE:
           msg = new CloseWebSocketFrame(true, 0, buf);
           break;
         case CONTINUATION:
-          msg = new ContinuationWebSocketFrame(buf);
+          msg = new ContinuationWebSocketFrame(frame.isFinalFrame(), 0, buf);
           break;
         case PONG:
-          msg = new PongWebSocketFrame(buf);
+          msg = new PongWebSocketFrame(frame.isFinalFrame(), 0, buf);
           break;
         case PING:
-          msg = new PingWebSocketFrame(buf);
+          msg = new PingWebSocketFrame(frame.isFinalFrame(), 0, buf);
           break;
         default:
           throw new IllegalStateException("Unsupported websocket msg " + msg);
