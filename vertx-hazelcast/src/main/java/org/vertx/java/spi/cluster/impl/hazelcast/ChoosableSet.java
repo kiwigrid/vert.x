@@ -16,12 +16,12 @@
 
 package org.vertx.java.spi.cluster.impl.hazelcast;
 
-import org.vertx.java.core.impl.ConcurrentHashSet;
-import org.vertx.java.core.spi.cluster.ChoosableIterable;
-
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Set;
+
+import org.vertx.java.core.impl.ConcurrentHashSet;
+import org.vertx.java.core.spi.cluster.ChoosableIterable;
 
 /**
  *
@@ -83,5 +83,10 @@ class ChoosableSet<T> implements ChoosableIterable<T> {
     } else {
       return null;
     }
+  }
+
+  @Override
+  public boolean contains(T item) {
+    return ids.contains(item);
   }
 }

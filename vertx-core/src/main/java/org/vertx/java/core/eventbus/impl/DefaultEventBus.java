@@ -16,6 +16,18 @@
 
 package org.vertx.java.core.eventbus.impl;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.slf4j.MDC;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
 import org.vertx.java.core.Handler;
@@ -43,22 +55,18 @@ import org.vertx.java.core.spi.cluster.AsyncMultiMap;
 import org.vertx.java.core.spi.cluster.ChoosableIterable;
 import org.vertx.java.core.spi.cluster.ClusterManager;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-
 /**
  *
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public class DefaultEventBus implements EventBus {
+
+  public enum LoadBalanceMode {
+    RoundRobin,
+    PreferLocal
+  }
+
+  public static final String VERTX_CLUSTER_LOADBALANCE = "vertx.cluster.loadbalancing";
 
   private static final Logger log = LoggerFactory.getLogger(DefaultEventBus.class);
 
@@ -74,6 +82,7 @@ public class DefaultEventBus implements EventBus {
   private final ConcurrentMap<String, Handlers> handlerMap = new ConcurrentHashMap<>();
   private final ClusterManager clusterMgr;
   private final AtomicLong replySequence = new AtomicLong(0);
+  private LoadBalanceMode loadBalanceMode = LoadBalanceMode.RoundRobin;
 
   public DefaultEventBus(VertxInternal vertx) {
     // Just some dummy server ID
@@ -95,7 +104,16 @@ public class DefaultEventBus implements EventBus {
     this.clusterMgr = clusterManager;
     this.subs = clusterMgr.getAsyncMultiMap("subs");
     this.server = setServer(port, hostname, listenHandler);
-    ManagementRegistry.registerEventBus(serverID);
+    setLoadBalanceMode();
+  }
+
+  private void setLoadBalanceMode() {
+    try {
+      this.loadBalanceMode = LoadBalanceMode.valueOf(System.getProperty(VERTX_CLUSTER_LOADBALANCE, LoadBalanceMode.RoundRobin.name()));
+      log.info("cluster loadbalancing mode: " + this.loadBalanceMode);
+    } catch (IllegalArgumentException e) {
+      log.error("invalid load balance mode: " + System.getProperty(VERTX_CLUSTER_LOADBALANCE, LoadBalanceMode.RoundRobin.name()));
+    }
   }
 
   @Override
@@ -625,6 +643,7 @@ public class DefaultEventBus implements EventBus {
           int serverPort = (publicPort == -1) ? server.port() : publicPort;
           String serverHost = (publicHost == null) ? hostName : publicHost;
           DefaultEventBus.this.serverID = new ServerID(serverPort, serverHost);
+          ManagementRegistry.registerEventBus(serverID);
         }
         if (listenHandler != null) {
           if (asyncResult.succeeded()) {
@@ -733,7 +752,14 @@ public class DefaultEventBus implements EventBus {
               if (event.succeeded()) {
                 ChoosableIterable<ServerID> serverIDs = event.result();
                 if (serverIDs != null && !serverIDs.isEmpty()) {
-                  sendToSubs(serverIDs, message, fTimeoutID, asyncResultHandler, replyHandler);
+                  if (message.send
+                      && loadBalanceMode == LoadBalanceMode.PreferLocal
+                      && serverIDs.contains(serverID)) {
+                    // stay in this node
+                    receiveMessage(message, fTimeoutID, asyncResultHandler, replyHandler);
+                  } else {
+                    sendToSubs(serverIDs, message, fTimeoutID, asyncResultHandler, replyHandler);
+                  }
                 } else {
                   receiveMessage(message, fTimeoutID, asyncResultHandler, replyHandler);
                 }
@@ -960,7 +986,23 @@ public class DefaultEventBus implements EventBus {
         // before it was received
         try {
           if (!holder.removed) {
-            holder.handler.handle(copied);
+            if (!DefaultContext.isMDCAware) {
+              holder.handler.handle(copied);
+              return;
+            }
+            Map<String, String> save = MDC.getCopyOfContextMap();
+            try {
+              MDC.clear();
+              if (holder.mdcValues != null && !holder.mdcValues.isEmpty()) {
+                MDC.setContextMap(holder.mdcValues);
+              }
+              holder.handler.handle(copied);
+            } finally {
+              MDC.clear();
+              if (save != null && !save.isEmpty()) {
+                MDC.setContextMap(save);
+              }
+            }
           }
         } finally {
           if (holder.replyHandler) {
@@ -978,12 +1020,14 @@ public class DefaultEventBus implements EventBus {
   }
 
   private static class HandlerHolder<T> {
+    private static boolean isMDCAware = Boolean.parseBoolean(System.getProperty("vertx.logger.mdcaware", "false"));
     final DefaultContext context;
     final Handler<Message<T>> handler;
     final boolean replyHandler;
     final boolean localOnly;
     final long timeoutID;
     boolean removed;
+    Map<String, String> mdcValues;
 
     HandlerHolder(Handler<Message<T>> handler, boolean replyHandler, boolean localOnly, DefaultContext context, long timeoutID) {
       this.context = context;
@@ -991,6 +1035,9 @@ public class DefaultEventBus implements EventBus {
       this.replyHandler = replyHandler;
       this.localOnly = localOnly;
       this.timeoutID = timeoutID;
+      if (isMDCAware) {
+        mdcValues = MDC.getCopyOfContextMap();
+      }
     }
 
     @Override
