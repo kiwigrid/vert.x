@@ -354,6 +354,8 @@ public class DefaultVertx implements VertxInternal {
       sharedNetServers.clear();
     }
 
+    eventBus.close(null);
+
     if (backgroundPool != null) {
       backgroundPool.shutdown();
     }
@@ -370,8 +372,6 @@ public class DefaultVertx implements VertxInternal {
     if (eventLoopGroup != null) {
       eventLoopGroup.shutdownGracefully();
     }
-
-    eventBus.close(null);
 
     setContext(null);
   }

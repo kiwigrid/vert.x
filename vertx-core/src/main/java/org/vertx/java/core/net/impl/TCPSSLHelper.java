@@ -376,10 +376,16 @@ public class TCPSSLHelper {
   }
 
   // Make sure SSLv3 is NOT enabled due to POODLE issue http://en.wikipedia.org/wiki/POODLE
-  private static final String[] ENABLED_PROTOCOLS = {"SSLv2Hello", "TLSv1", "TLSv1.1", "TLSv1.2"};
+  private static final String[] ENABLED_SERVER_PROTOCOLS = {"SSLv2Hello", "TLSv1", "TLSv1.1", "TLSv1.2"};
+  // clients shall not use SSLv2Hello since this is used autimatically and gonna break SNI
+  private static final String[] ENABLED_CLIENT_PROTOCOLS = {"TLSv1", "TLSv1.1", "TLSv1.2"};
 
   private SslHandler createHandler(SSLEngine engine, boolean client) {
-    engine.setEnabledProtocols(ENABLED_PROTOCOLS);
+    if (client) {
+      engine.setEnabledProtocols(ENABLED_CLIENT_PROTOCOLS);
+    } else {
+      engine.setEnabledProtocols(ENABLED_SERVER_PROTOCOLS);
+    }
     engine.setUseClientMode(client);
     if (!client) {
       switch (getClientAuth()) {
