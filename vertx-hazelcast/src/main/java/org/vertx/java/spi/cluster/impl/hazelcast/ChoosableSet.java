@@ -54,7 +54,9 @@ class ChoosableSet<T> implements ChoosableIterable<T> {
   }
 
   public void remove(T elem) {
-    ids.remove(elem);
+    if (ids.remove(elem)) {
+      iter = ids.iterator();
+    }
   }
 
   public void merge(ChoosableSet<T> toMerge) {
