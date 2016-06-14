@@ -402,7 +402,9 @@ public class Starter {
           }
         });
         try {
-          if (!latch.await(30, TimeUnit.SECONDS)) {
+		  int undeployTimeout = Integer.getInteger("org.vertx.Starter.UNDEPLOY_TIMEOUT_SECONDS", 30);
+          log.info("Waiting for " + undeployTimeout + " seconds for undeployment...");
+          if (!latch.await(undeployTimeout, TimeUnit.SECONDS)) {
             log.error("Timed out waiting to undeploy");
           }
         } catch (InterruptedException e) {
