@@ -805,6 +805,7 @@ public class DefaultEventBus implements EventBus {
       context = vertx.createEventLoopContext();
     }
     Handlers handlers = handlerMap.get(address);
+    HandlerHolder holder = new HandlerHolder(handler, replyHandler, localOnly, context, timeoutID);
     if (handlers == null) {
       handlers = new Handlers();
       Handlers prevHandlers = handlerMap.putIfAbsent(address, handlers);
@@ -815,12 +816,16 @@ public class DefaultEventBus implements EventBus {
         completionHandler = new Handler<AsyncResult<Void>>() {
           public void handle(AsyncResult<Void> event) {
             if (event.failed()) {
-              log.error("Failed to remove entry", event.cause());
+              log.error("Failed to add entry", event.cause());
             }
           }
         };
       }
-      handlers.list.add(new HandlerHolder(handler, replyHandler, localOnly, context, timeoutID));
+      if (handlers.list.contains(holder)) {
+        completionHandler.handle(new DefaultFutureResult<Void>(new IllegalArgumentException("Same handler already registered at this address.")));
+        return;
+	  }
+      handlers.list.add(holder);
       if (subs != null && !replyHandler && !localOnly) {
         // Propagate the information
         subs.add(address, serverID, completionHandler);
@@ -828,7 +833,11 @@ public class DefaultEventBus implements EventBus {
         callCompletionHandler(completionHandler);
       }
     } else {
-      handlers.list.add(new HandlerHolder(handler, replyHandler, localOnly, context, timeoutID));
+      if (handlers.list.contains(holder)) {
+        completionHandler.handle(new DefaultFutureResult<Void>(new IllegalArgumentException("Same handler already registered at this address.")));
+        return;
+      }
+      handlers.list.add(holder);
       if (completionHandler != null) {
         callCompletionHandler(completionHandler);
       }
