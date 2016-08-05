@@ -23,6 +23,8 @@ import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.platform.PlatformLocator;
 import org.vertx.java.platform.PlatformManager;
+import org.vertx.java.platform.configuration.ConfigurationLoader;
+import org.vertx.java.platform.configuration.JsonFileConfigurationLoader;
 import org.vertx.java.platform.impl.Args;
 import org.vertx.java.platform.impl.resolver.HttpResolution;
 
@@ -269,6 +271,15 @@ public class Starter {
     block();
   }
 
+  private ConfigurationLoader getConfigurationLoader(String className) {
+    try {
+      return (ConfigurationLoader) Class.forName(className).newInstance();
+    } catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
+      log.error("Could not instantiate configuration loader: " + className, e);
+      return null;
+    }
+  }
+
   private void runVerticle(boolean zip, boolean module, String main, Args args) {
     boolean ha = args.map.get("-ha") != null;
     boolean clustered = args.map.get("-cluster") != null;
@@ -296,25 +307,16 @@ public class Starter {
       instances = 1;
     }
 
-    String configFile = args.map.get("-conf");
-    JsonObject conf;
-
-    if (configFile != null) {
-      try (Scanner scanner = new Scanner(new File(configFile)).useDelimiter("\\A")){
-        String sconf = scanner.next();
-        try {
-          conf = new JsonObject(sconf);
-        } catch (DecodeException e) {
-          log.error("Configuration file does not contain a valid JSON object");
-          return;
-        }
-      } catch (FileNotFoundException e) {
-        log.error("Config file " + configFile + " does not exist");
-        return;
-      }
-    } else {
-      conf = null;
+    String configurationLoaderClass = args.map.get("-configurationLoader");
+    if (configurationLoaderClass == null) {
+      configurationLoaderClass = JsonFileConfigurationLoader.class.getName();
     }
+    ConfigurationLoader configurationLoader = getConfigurationLoader(configurationLoaderClass);
+    if (configurationLoader == null) {
+      return;
+    }
+
+    JsonObject conf = configurationLoader.loadConfiguration(args);
 
     // Convert classpath to URL[]
 
