@@ -821,11 +821,10 @@ public class DefaultEventBus implements EventBus {
           }
         };
       }
-      if (handlers.list.contains(holder)) {
-        completionHandler.handle(new DefaultFutureResult<Void>(new IllegalArgumentException("Same handler already registered at this address.")));
-        return;
-	  }
-      handlers.list.add(holder);
+      if (!handlers.list.contains(holder)) {
+        handlers.list.add(holder);
+      }
+
       if (subs != null && !replyHandler && !localOnly) {
         // Propagate the information
         subs.add(address, serverID, completionHandler);
@@ -833,11 +832,13 @@ public class DefaultEventBus implements EventBus {
         callCompletionHandler(completionHandler);
       }
     } else {
-      if (handlers.list.contains(holder)) {
-        completionHandler.handle(new DefaultFutureResult<Void>(new IllegalArgumentException("Same handler already registered at this address.")));
-        return;
+      if (!handlers.list.contains(holder)) {
+        handlers.list.add(holder);
       }
-      handlers.list.add(holder);
+      if (subs != null && !replyHandler && !localOnly) {
+        // Propagate the information
+        subs.add(address, serverID, completionHandler);
+      }
       if (completionHandler != null) {
         callCompletionHandler(completionHandler);
       }
@@ -879,9 +880,10 @@ public class DefaultEventBus implements EventBus {
     // before the cleanup for the previous one has been processed
     // So we only actually remove the entry if no new entry has been added
     if (connections.remove(theServerID, holder)) {
-      log.debug("Cluster connection closed: " + theServerID + " holder " + holder);
+      log.info("Cluster connection closed: " + theServerID + " holder " + holder);
 
       if (failed) {
+        log.info("Cleaning up subs map for server " + theServerID);
         cleanSubsForServerID(theServerID);
       }
     }
