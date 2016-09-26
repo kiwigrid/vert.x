@@ -40,7 +40,7 @@ import java.util.Set;
  * 
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
-class HazelcastClusterManager implements ClusterManager, MembershipListener {
+public class HazelcastClusterManager implements ClusterManager, MembershipListener {
 
   private static final Logger log = LoggerFactory.getLogger(HazelcastClusterManager.class);
   // Hazelcast config file
@@ -213,4 +213,7 @@ class HazelcastClusterManager implements ClusterManager, MembershipListener {
     return cfg;
   }
 
+  public HazelcastInstance getHazelcastInstance() {
+    return hazelcast;
+  }
 }
