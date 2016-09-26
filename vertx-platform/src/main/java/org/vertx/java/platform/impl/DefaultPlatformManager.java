@@ -1752,7 +1752,6 @@ public class DefaultPlatformManager implements PlatformManagerInternal, ModuleRe
               setPathResolver(modDir);
               DefaultFutureResult<Void> vr = new DefaultFutureResult<>();
 
-              verticle.start(vr);
               vr.setHandler(new Handler<AsyncResult<Void>>() {
                 @Override
                 public void handle(AsyncResult<Void> ar) {
@@ -1763,6 +1762,7 @@ public class DefaultPlatformManager implements PlatformManagerInternal, ModuleRe
                   }
                 }
               });
+              verticle.start(vr);
             } catch (Throwable t) {
               handleDeployFailure(t, deployment, aggHandler);
             }

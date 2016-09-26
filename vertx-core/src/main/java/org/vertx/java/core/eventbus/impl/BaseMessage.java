@@ -354,4 +354,16 @@ public abstract class BaseMessage<U> implements Message<U> {
       bus.sendReplyWithTimeout(sender, msg, timeout, replyHandler);
     }
   }
+
+  @Override
+  public String toString() {
+    return "BaseMessage{" +
+            "body=" + body +
+            ", sender=" + sender +
+            ", bus=" + bus +
+            ", address='" + address + '\'' +
+            ", replyAddress='" + replyAddress + '\'' +
+            ", send=" + send +
+            '}';
+  }
 }
