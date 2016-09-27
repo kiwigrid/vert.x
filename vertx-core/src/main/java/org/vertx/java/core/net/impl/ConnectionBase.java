@@ -239,4 +239,15 @@ public abstract class ConnectionBase {
   }
 
   protected abstract void handleInterestedOpsChanged();
+
+  @Override
+  public String toString() {
+    return "ConnectionBase{" +
+            "writable=" + writable +
+            ", needsFlush=" + needsFlush +
+            ", read=" + read +
+            ", localAddress=" + localAddress() +
+            ", remoteAddress=" + remoteAddress() +
+            '}';
+  }
 }
