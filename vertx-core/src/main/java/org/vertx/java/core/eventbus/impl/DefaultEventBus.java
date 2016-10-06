@@ -632,6 +632,7 @@ public class DefaultEventBus implements EventBus {
           int serverPort = (publicPort == -1) ? server.port() : publicPort;
           String serverHost = (publicHost == null) ? hostName : publicHost;
           DefaultEventBus.this.serverID = new ServerID(serverPort, serverHost);
+          log.info("Registering EventBus with serverID=" + serverID);
           ManagementRegistry.registerEventBus(serverID);
         }
         if (listenHandler != null) {
@@ -1086,11 +1087,13 @@ public class DefaultEventBus implements EventBus {
       connected = true;
       socket.exceptionHandler(new Handler<Throwable>() {
         public void handle(Throwable t) {
+          log.error("Socket exception, cleaning up connection.", t);
           cleanupConnection(theServerID, ConnectionHolder.this, true);
         }
       });
       socket.closeHandler(new VoidHandler() {
         public void handle() {
+          log.info("Socket closed, cleaning up connection.");
           cleanupConnection(theServerID, ConnectionHolder.this, false);
         }
       });
@@ -1115,6 +1118,7 @@ public class DefaultEventBus implements EventBus {
           if (res.succeeded()) {
             connected(theServerID, res.result());
           } else {
+            log.error("Could not connect to " + theServerID + " closing connection.", res.cause());
             cleanupConnection(theServerID, ConnectionHolder.this, true);
           }
         }
