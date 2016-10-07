@@ -17,14 +17,12 @@
 package org.vertx.java.spi.cluster.impl.hazelcast;
 
 import com.hazelcast.core.EntryEvent;
-import com.hazelcast.core.MapEvent;
 import com.hazelcast.core.EntryListener;
+import com.hazelcast.core.MapEvent;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.impl.DefaultFutureResult;
-import org.vertx.java.core.logging.Logger;
-import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.core.spi.Action;
 import org.vertx.java.core.spi.VertxSPI;
 import org.vertx.java.core.spi.cluster.AsyncMultiMap;
@@ -40,8 +38,6 @@ import java.util.concurrent.ConcurrentMap;
  */
 class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener<K, V> {
 
-  private static final Logger log = LoggerFactory.getLogger(HazelcastAsyncMultiMap.class);
-
   private final VertxSPI vertx;
   private final com.hazelcast.core.MultiMap<K, V> map;
 
@@ -56,11 +52,21 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
    way to get an initial state plus a stream of updates.
     */
   private ConcurrentMap<K, ChoosableSet<V>> cache = new ConcurrentHashMap<>();
+  private long timerId;
 
   public HazelcastAsyncMultiMap(VertxSPI vertx, com.hazelcast.core.MultiMap<K, V> map) {
     this.vertx = vertx;
     this.map = map;
     map.addEntryListener(this, true);
+    int evictionTime = Integer.parseInt(System.getProperty("vertx.asyncMultiMap.evictionTime", "60000"));
+    if (evictionTime > 0) {
+      timerId = vertx.setPeriodic(evictionTime, new Handler<Long>() {
+        @Override
+        public void handle(Long event) {
+          cache.clear();
+        }
+      });
+    }
   }
 
   @Override
@@ -197,5 +203,9 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
   }
 
 
-
+  @Override
+  protected void finalize() throws Throwable {
+    vertx.cancelTimer(timerId);
+    super.finalize();
+  }
 }
