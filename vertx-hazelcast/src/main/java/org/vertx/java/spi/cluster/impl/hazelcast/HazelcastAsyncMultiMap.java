@@ -52,21 +52,11 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
    way to get an initial state plus a stream of updates.
     */
   private ConcurrentMap<K, ChoosableSet<V>> cache = new ConcurrentHashMap<>();
-  private long timerId;
 
   public HazelcastAsyncMultiMap(VertxSPI vertx, com.hazelcast.core.MultiMap<K, V> map) {
     this.vertx = vertx;
     this.map = map;
     map.addEntryListener(this, true);
-    int evictionTime = Integer.parseInt(System.getProperty("vertx.asyncMultiMap.evictionTime", "60000"));
-    if (evictionTime > 0) {
-      timerId = vertx.setPeriodic(evictionTime, new Handler<Long>() {
-        @Override
-        public void handle(Long event) {
-          cache.clear();
-        }
-      });
-    }
   }
 
   @Override
@@ -77,6 +67,14 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
           V v = entry.getValue();
           if (val.equals(v)) {
             map.remove(entry.getKey(), v);
+          }
+        }
+        // remove directly from cache as well, b/c if the hazelcast does know the server id , it will never get thrown
+        // out of the cache
+        for (Map.Entry<K, ChoosableSet<V>> entry : cache.entrySet()) {
+          ChoosableSet<V> value = entry.getValue();
+          if (value != null && value.contains(val)){
+            removeEntry(entry.getKey(), val);
           }
         }
         return null;
@@ -202,10 +200,4 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
     entryRemoved(entry);
   }
 
-
-  @Override
-  protected void finalize() throws Throwable {
-    vertx.cancelTimer(timerId);
-    super.finalize();
-  }
 }
