@@ -1,0 +1,156 @@
+package org.vertx.java.spi.cluster.impl.hazelcast;
+
+import com.hazelcast.config.Config;
+import com.hazelcast.config.JoinConfig;
+import com.hazelcast.config.NetworkConfig;
+import com.hazelcast.core.*;
+import com.hazelcast.instance.GroupProperties;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.vertx.java.core.AsyncResult;
+import org.vertx.java.core.Handler;
+import org.vertx.java.core.impl.DefaultFutureResult;
+import org.vertx.java.core.impl.DefaultVertx;
+import org.vertx.java.core.spi.Action;
+import org.vertx.java.core.spi.cluster.ChoosableIterable;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import static com.hazelcast.instance.HazelcastTestUtil.closeConnectionBetween;
+import static org.junit.Assert.assertTrue;
+
+/**
+ * @author <a href="mailto:andreas.berger@kiwigrid.com">Andreas Berger</a>
+ */
+public class HazelcastAsyncMultiMapTest {
+
+  private HazelcastInstance h1;
+  private HazelcastInstance h2;
+
+  @Before
+  public void setup() {
+    Config config = new Config();
+    config.setProperty(GroupProperties.PROP_MERGE_FIRST_RUN_DELAY_SECONDS, "5");
+    config.setProperty(GroupProperties.PROP_MERGE_NEXT_RUN_DELAY_SECONDS, "3");
+    config.getGroupConfig().setName(UUID.randomUUID().toString());
+
+    NetworkConfig networkConfig = config.getNetworkConfig();
+    JoinConfig join = networkConfig.getJoin();
+    join.getMulticastConfig().setEnabled(false);
+    join.getTcpIpConfig().setEnabled(true);
+    join.getTcpIpConfig().addMember("127.0.0.1");
+
+    h1 = Hazelcast.newHazelcastInstance(config);
+    h2 = Hazelcast.newHazelcastInstance(config);
+  }
+
+  @After
+  public void cleanUp() {
+    h1.shutdown();
+    h2.shutdown();
+  }
+
+
+  @Test
+  public void testSplitBrain() throws InterruptedException {
+    final CountDownLatch splitLatch = new CountDownLatch(1);
+    h2.getCluster().addMembershipListener(new SplitListener(splitLatch));
+
+    final CountDownLatch mergeLatch = new CountDownLatch(1);
+    h2.getLifecycleService().addLifecycleListener(new MergedEventLifeCycleListener(mergeLatch));
+
+    DefaultVertx vertx = new DefaultVertx() {
+      @Override
+      public <T> void executeBlocking(Action<T> action, Handler<AsyncResult<T>> asyncResultHandler) {
+        T result = action.perform();
+        if (asyncResultHandler != null)
+          asyncResultHandler.handle(new DefaultFutureResult<>(result));
+      }
+    };
+    HazelcastAsyncMultiMap<String, String> map1 = new HazelcastAsyncMultiMap<>(vertx, h1, h1.<String, String>getMultiMap("foo"));
+    HazelcastAsyncMultiMap<String, String> map2 = new HazelcastAsyncMultiMap<>(vertx, h2, h2.<String, String>getMultiMap("foo"));
+
+    map1.add("key", "v0", null);
+
+    closeConnectionBetween(h1, h2);
+
+    assertTrue(splitLatch.await(10, TimeUnit.SECONDS));
+    Assert.assertEquals(1, h1.getCluster().getMembers().size());
+    Assert.assertEquals(1, h2.getCluster().getMembers().size());
+
+    map1.add("key", "v1", null);
+    map1.add("key", "v2", null);
+
+    map2.add("key", "v1", null);
+    map2.add("key", "v3", null);
+    map2.removeAllForValue("v0", null);
+
+    assertTrue(mergeLatch.await(30, TimeUnit.SECONDS));
+    Assert.assertEquals(2, h1.getCluster().getMembers().size());
+    Assert.assertEquals(2, h2.getCluster().getMembers().size());
+
+    TreeSet<Object> values = new TreeSet<>(h1.getMultiMap("foo").get("key"));
+    Assert.assertEquals(values, new TreeSet<>(h2.getMultiMap("foo").get("key")));
+    assertEquals(values, map1);
+    assertEquals(values, map2);
+
+  }
+
+  private void assertEquals(final Set<Object> strings, HazelcastAsyncMultiMap<String, String> map) {
+    map.get("key", new Handler<AsyncResult<ChoosableIterable<String>>>() {
+      @Override
+      public void handle(AsyncResult<ChoosableIterable<String>> event) {
+        Set<String> l = new HashSet<>();
+        for (String next : event.result()) {
+          l.add(next);
+        }
+        Assert.assertEquals(strings, l);
+      }
+    });
+  }
+
+  private static class MergedEventLifeCycleListener implements LifecycleListener {
+
+    private final CountDownLatch mergeLatch;
+
+    public MergedEventLifeCycleListener(CountDownLatch mergeLatch) {
+      this.mergeLatch = mergeLatch;
+    }
+
+    public void stateChanged(LifecycleEvent event) {
+      if (event.getState() == LifecycleEvent.LifecycleState.MERGED) {
+        mergeLatch.countDown();
+      }
+    }
+
+  }
+
+  private static class SplitListener implements MembershipListener {
+    private final CountDownLatch splitLatch;
+
+    public SplitListener(CountDownLatch splitLatch) {
+      this.splitLatch = splitLatch;
+    }
+
+    @Override
+    public void memberAdded(MembershipEvent membershipEvent) {
+    }
+
+    @Override
+    public void memberRemoved(MembershipEvent membershipEvent) {
+      splitLatch.countDown();
+    }
+
+    @Override
+    public void memberAttributeChanged(MemberAttributeEvent memberAttributeEvent) {
+    }
+  }
+
+}

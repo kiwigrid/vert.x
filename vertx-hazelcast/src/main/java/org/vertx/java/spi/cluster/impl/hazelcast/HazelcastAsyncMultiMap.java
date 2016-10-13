@@ -16,9 +16,7 @@
 
 package org.vertx.java.spi.cluster.impl.hazelcast;
 
-import com.hazelcast.core.EntryEvent;
-import com.hazelcast.core.EntryListener;
-import com.hazelcast.core.MapEvent;
+import com.hazelcast.core.*;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
 import org.vertx.java.core.Handler;
@@ -53,10 +51,20 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
     */
   private ConcurrentMap<K, ChoosableSet<V>> cache = new ConcurrentHashMap<>();
 
-  public HazelcastAsyncMultiMap(VertxSPI vertx, com.hazelcast.core.MultiMap<K, V> map) {
+  public HazelcastAsyncMultiMap(VertxSPI vertx, HazelcastInstance hazelcastInstance,  MultiMap<K, V> map) {
     this.vertx = vertx;
     this.map = map;
     map.addEntryListener(this, true);
+    // This listener will keep the cache in sync with the Hazelcast MultiMap. If a merge occurs the cache will get
+    // evicted. This will not solve the missing merge feature of MultiMaps needed for split brains.
+    hazelcastInstance.getLifecycleService().addLifecycleListener(new LifecycleListener() {
+      @Override
+      public void stateChanged(LifecycleEvent event) {
+        if (event.getState() == LifecycleEvent.LifecycleState.MERGED){
+          cache.clear();
+        }
+      }
+    });
   }
 
   @Override
@@ -67,14 +75,6 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
           V v = entry.getValue();
           if (val.equals(v)) {
             map.remove(entry.getKey(), v);
-          }
-        }
-        // remove directly from cache as well, b/c if the hazelcast does know the server id , it will never get thrown
-        // out of the cache
-        for (Map.Entry<K, ChoosableSet<V>> entry : cache.entrySet()) {
-          ChoosableSet<V> value = entry.getValue();
-          if (value != null && value.contains(val)){
-            removeEntry(entry.getKey(), val);
           }
         }
         return null;

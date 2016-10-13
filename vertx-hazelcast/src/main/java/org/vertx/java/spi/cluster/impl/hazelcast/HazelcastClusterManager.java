@@ -37,7 +37,7 @@ import java.util.Set;
 
 /**
  * A cluster manager that uses Hazelcast
- * 
+ *
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public class HazelcastClusterManager implements ClusterManager, MembershipListener {
@@ -96,8 +96,8 @@ public class HazelcastClusterManager implements ClusterManager, MembershipListen
 	 * @return subscription map
 	 */
   public <K, V> AsyncMultiMap<K, V> getAsyncMultiMap(final String name) {
-    com.hazelcast.core.MultiMap map = hazelcast.getMultiMap(name);
-    return new HazelcastAsyncMultiMap(vertx, map);
+    com.hazelcast.core.MultiMap<K,V> map = hazelcast.getMultiMap(name);
+    return new HazelcastAsyncMultiMap<>(vertx, hazelcast, map);
   }
 
   @Override
