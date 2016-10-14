@@ -43,6 +43,7 @@ import org.vertx.java.core.parsetools.RecordParser;
 import org.vertx.java.core.spi.cluster.AsyncMultiMap;
 import org.vertx.java.core.spi.cluster.ChoosableIterable;
 import org.vertx.java.core.spi.cluster.ClusterManager;
+import org.vertx.java.core.spi.cluster.NodeListener;
 
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public class DefaultEventBus implements EventBus {
+
+  private static final String KEY_SERVER_ID_HOST = "ServerID.host";
+  private static final String KEY_SERVER_ID_PORT = "ServerID.port";
 
   public enum LoadBalanceMode {
     RoundRobin,
@@ -98,11 +102,37 @@ public class DefaultEventBus implements EventBus {
   }
 
   public DefaultEventBus(VertxInternal vertx, int port, String hostname, ClusterManager clusterManager,
-                         Handler<AsyncResult<Void>> listenHandler) {
+                         final Handler<AsyncResult<Void>> listenHandler) {
     this.vertx = vertx;
     this.clusterMgr = clusterManager;
     this.subs = clusterMgr.getAsyncMultiMap("subs");
     this.server = setServer(port, hostname, listenHandler);
+    clusterManager.setNodeAttribute(KEY_SERVER_ID_HOST, serverID.host);
+    clusterManager.setNodeAttribute(KEY_SERVER_ID_PORT, serverID.port);
+    clusterManager.addNodeListener(new NodeListener() {
+      @Override
+      public void nodeAdded(String nodeID, Map<String, Object> nodeAttributes) {
+        log.info("reregister all my handlers again in subs");
+        for (Map.Entry<String, Handlers> handlersEntry : handlerMap.entrySet()) {
+          for (HandlerHolder holder : handlersEntry.getValue().list) {
+            if (!holder.localOnly) {
+              subs.add(handlersEntry.getKey(), serverID, listenHandler);
+            }
+          }
+        }
+      }
+
+      @Override
+      public void nodeLeft(String nodeID, Map<String, Object> nodeAttributes) {
+        Object host = nodeAttributes.get(KEY_SERVER_ID_HOST);
+        Object port = nodeAttributes.get(KEY_SERVER_ID_HOST);
+        if (host instanceof String && port instanceof Number) {
+          ServerID id = new ServerID(((Number) port).intValue(), (String) host);
+          log.info("remove all handlers of server " + id + " from cluster");
+          subs.removeAllForValue(id, null);
+        }
+      }
+    });
     setLoadBalanceMode();
   }
 

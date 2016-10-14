@@ -134,12 +134,12 @@ public class HAManager {
     this.nodeID = clusterManager.getNodeID();
     clusterManager.nodeListener(new NodeListener() {
       @Override
-      public void nodeAdded(String nodeID) {
+      public void nodeAdded(String nodeID, Map<String,Object> nodeAttributes) {
         HAManager.this.nodeAdded(nodeID);
       }
 
       @Override
-      public void nodeLeft(String leftNodeID) {
+      public void nodeLeft(String leftNodeID, Map<String,Object> nodeAttributes) {
         HAManager.this.nodeLeft(leftNodeID);
       }
     });

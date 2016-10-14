@@ -17,6 +17,8 @@
 package org.vertx.java.spi.cluster.impl.hazelcast;
 
 import com.hazelcast.core.*;
+import com.hazelcast.map.EntryBackupProcessor;
+import com.hazelcast.map.EntryProcessor;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
 import org.vertx.java.core.Handler;
@@ -27,7 +29,9 @@ import org.vertx.java.core.spi.cluster.AsyncMultiMap;
 import org.vertx.java.core.spi.cluster.ChoosableIterable;
 
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -37,7 +41,7 @@ import java.util.concurrent.ConcurrentMap;
 class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener<K, V> {
 
   private final VertxSPI vertx;
-  private final com.hazelcast.core.MultiMap<K, V> map;
+  private final IMap<K, Set<V>> map;
 
   /*
    The Hazelcast near cache is very slow so we use our own one.
@@ -51,32 +55,16 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
     */
   private ConcurrentMap<K, ChoosableSet<V>> cache = new ConcurrentHashMap<>();
 
-  public HazelcastAsyncMultiMap(VertxSPI vertx, HazelcastInstance hazelcastInstance,  MultiMap<K, V> map) {
+  public HazelcastAsyncMultiMap(VertxSPI vertx, IMap<K, Set<V>> map) {
     this.vertx = vertx;
     this.map = map;
-    map.addEntryListener(this, true);
-    // This listener will keep the cache in sync with the Hazelcast MultiMap. If a merge occurs the cache will get
-    // evicted. This will not solve the missing merge feature of MultiMaps needed for split brains.
-    hazelcastInstance.getLifecycleService().addLifecycleListener(new LifecycleListener() {
-      @Override
-      public void stateChanged(LifecycleEvent event) {
-        if (event.getState() == LifecycleEvent.LifecycleState.MERGED){
-          cache.clear();
-        }
-      }
-    });
   }
 
   @Override
   public void removeAllForValue(final V val, final Handler<AsyncResult<Void>> completionHandler) {
     vertx.executeBlocking(new Action<Void>() {
       public Void perform() {
-        for (Map.Entry<K, V> entry : map.entrySet()) {
-          V v = entry.getValue();
-          if (val.equals(v)) {
-            map.remove(entry.getKey(), v);
-          }
-        }
+        map.executeOnEntries(new MultiMapEntryProcessor<K, V>(HazelcastServerID.convertServerID(val), false));
         return null;
       }
     }, completionHandler);
@@ -84,12 +72,23 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
 
   @Override
   public void add(final K k, final V v, final Handler<AsyncResult<Void>> completionHandler) {
-    vertx.executeBlocking(new Action<Void>() {
-      public Void perform() {
-        map.put(k, HazelcastServerID.convertServerID(v));
-        return null;
-      }
-    }, completionHandler);
+    map.submitToKey(
+            k,
+            new MultiMapEntryProcessor<K, V>(HazelcastServerID.convertServerID(v), true),
+            new ExecutionCallback() {
+              @Override
+              public void onResponse(Object response) {
+                if (completionHandler != null)
+                  completionHandler.handle(new DefaultFutureResult<Void>());
+              }
+
+              @Override
+              public void onFailure(Throwable t) {
+                if (completionHandler != null)
+                  completionHandler.handle(new DefaultFutureResult<Void>(t));
+              }
+            }
+    );
   }
 
   @Override
@@ -140,7 +139,7 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
 
     vertx.executeBlocking(new Action<Void>() {
       public Void perform() {
-        map.remove(k, HazelcastServerID.convertServerID(v));
+        map.executeOnKey(k, new MultiMapEntryProcessor<K, V>(HazelcastServerID.convertServerID(v), false));
         return null;
       }
     }, completionHandler);
@@ -200,4 +199,46 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
     entryRemoved(entry);
   }
 
+  public static class MultiMapEntryProcessor<K, V> implements EntryProcessor<K, Set<V>> {
+    private final V val;
+    private boolean add = true;
+
+    public MultiMapEntryProcessor(V val, boolean add) {
+      this.val = val;
+      this.add = add;
+    }
+
+    @Override
+    public Object process(Map.Entry<K, Set<V>> entry) {
+      if (entry == null) {
+        return null;
+      }
+      Set<V> values = entry.getValue();
+      boolean changed = false;
+      if (add) {
+        if (values == null) {
+          values = new HashSet<>();
+        }
+        changed = values.add(val);
+      } else if (values != null) {
+        changed = values.remove(val);
+        if (values.isEmpty()) {
+          values = null;
+        }
+      }
+      if (changed)
+        entry.setValue(values);
+      return null;
+    }
+
+    @Override
+    public EntryBackupProcessor<K, Set<V>> getBackupProcessor() {
+      return new EntryBackupProcessor<K, Set<V>>() {
+        @Override
+        public void processBackup(Map.Entry<K, Set<V>> entry) {
+          process(entry);
+        }
+      };
+    }
+  }
 }
