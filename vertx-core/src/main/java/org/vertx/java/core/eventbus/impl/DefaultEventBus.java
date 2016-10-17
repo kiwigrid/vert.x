@@ -886,9 +886,7 @@ public class DefaultEventBus implements EventBus {
     completionHandler.handle(new DefaultFutureResult<>((Void) null));
   }
 
-  private void cleanupConnection(ServerID theServerID,
-                                 ConnectionHolder holder,
-                                 boolean failed) {
+  private void cleanupConnection(ServerID theServerID, ConnectionHolder holder) {
     if (holder.timeoutID != -1) {
       vertx.cancelTimer(holder.timeoutID);
     }
@@ -940,7 +938,7 @@ public class DefaultEventBus implements EventBus {
           public void handle(Long timerID) {
             // Didn't get pong in time - consider connection dead
             log.warn("No pong from server " + serverID + " - will consider it dead, timerID: " + timerID + " holder " + holder);
-            cleanupConnection(holder.theServerID, holder, true);
+            cleanupConnection(holder.theServerID, holder);
           }
         });
         new PingMessage(serverID).write(holder.socket);
@@ -1106,13 +1104,13 @@ public class DefaultEventBus implements EventBus {
       socket.exceptionHandler(new Handler<Throwable>() {
         public void handle(Throwable t) {
           log.error("Socket exception, cleaning up connection.", t);
-          cleanupConnection(theServerID, ConnectionHolder.this, true);
+          cleanupConnection(theServerID, ConnectionHolder.this);
         }
       });
       socket.closeHandler(new VoidHandler() {
         public void handle() {
           log.info("Socket closed, cleaning up connection.");
-          cleanupConnection(theServerID, ConnectionHolder.this, false);
+          cleanupConnection(theServerID, ConnectionHolder.this);
         }
       });
       socket.dataHandler(new Handler<Buffer>() {
@@ -1137,7 +1135,7 @@ public class DefaultEventBus implements EventBus {
             connected(theServerID, res.result());
           } else {
             log.error("Could not connect to " + theServerID + " closing connection.", res.cause());
-            cleanupConnection(theServerID, ConnectionHolder.this, true);
+            cleanupConnection(theServerID, ConnectionHolder.this);
           }
         }
       });
