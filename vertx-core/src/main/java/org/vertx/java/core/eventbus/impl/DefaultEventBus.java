@@ -107,9 +107,7 @@ public class DefaultEventBus implements EventBus {
     this.clusterMgr = clusterManager;
     this.subs = clusterMgr.getAsyncMultiMap("subs");
     this.server = setServer(port, hostname, listenHandler);
-    clusterManager.setNodeAttribute(KEY_SERVER_ID_HOST, serverID.host);
-    clusterManager.setNodeAttribute(KEY_SERVER_ID_PORT, serverID.port);
-    clusterManager.addNodeListener(new NodeListener() {
+    clusterMgr.addNodeListener(new NodeListener() {
       @Override
       public void nodeAdded(String nodeID, Map<String, Object> nodeAttributes) {
         log.info("reregister all my handlers again in subs");
@@ -664,6 +662,10 @@ public class DefaultEventBus implements EventBus {
           DefaultEventBus.this.serverID = new ServerID(serverPort, serverHost);
           log.info("Registering EventBus with serverID=" + serverID);
           ManagementRegistry.registerEventBus(serverID);
+          if (clusterMgr != null) {
+            clusterMgr.setNodeAttribute(KEY_SERVER_ID_HOST, serverID.host);
+            clusterMgr.setNodeAttribute(KEY_SERVER_ID_PORT, serverID.port);
+          }
         }
         if (listenHandler != null) {
           if (asyncResult.succeeded()) {
@@ -884,15 +886,6 @@ public class DefaultEventBus implements EventBus {
     completionHandler.handle(new DefaultFutureResult<>((Void) null));
   }
 
-  private void cleanSubsForServerID(ServerID theServerID) {
-    if (subs != null) {
-      subs.removeAllForValue(theServerID, new Handler<AsyncResult<Void>>() {
-        public void handle(AsyncResult<Void> event) {
-        }
-      });
-    }
-  }
-
   private void cleanupConnection(ServerID theServerID,
                                  ConnectionHolder holder,
                                  boolean failed) {
@@ -912,11 +905,6 @@ public class DefaultEventBus implements EventBus {
     // So we only actually remove the entry if no new entry has been added
     if (connections.remove(theServerID, holder)) {
       log.info("Cluster connection closed: " + theServerID + " holder " + holder);
-
-      if (failed) {
-        log.info("Cleaning up subs map for server " + theServerID);
-        cleanSubsForServerID(theServerID);
-      }
     }
   }
 
