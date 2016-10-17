@@ -16,9 +16,14 @@
 
 package org.vertx.java.spi.cluster.impl.hazelcast;
 
+import java.util.Collection;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
 import com.hazelcast.core.*;
 import com.hazelcast.map.EntryBackupProcessor;
-import com.hazelcast.map.EntryProcessor;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
 import org.vertx.java.core.Handler;
@@ -27,13 +32,6 @@ import org.vertx.java.core.spi.Action;
 import org.vertx.java.core.spi.VertxSPI;
 import org.vertx.java.core.spi.cluster.AsyncMultiMap;
 import org.vertx.java.core.spi.cluster.ChoosableIterable;
-
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * @author <a href="http://tfox.org">Tim Fox</a>
@@ -199,46 +197,4 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
     entryRemoved(entry);
   }
 
-  public static class MultiMapEntryProcessor<K, V> implements EntryProcessor<K, Set<V>> {
-    private final V val;
-    private boolean add = true;
-
-    public MultiMapEntryProcessor(V val, boolean add) {
-      this.val = val;
-      this.add = add;
-    }
-
-    @Override
-    public Object process(Map.Entry<K, Set<V>> entry) {
-      if (entry == null) {
-        return null;
-      }
-      Set<V> values = entry.getValue();
-      boolean changed = false;
-      if (add) {
-        if (values == null) {
-          values = new HashSet<>();
-        }
-        changed = values.add(val);
-      } else if (values != null) {
-        changed = values.remove(val);
-        if (values.isEmpty()) {
-          values = null;
-        }
-      }
-      if (changed)
-        entry.setValue(values);
-      return null;
-    }
-
-    @Override
-    public EntryBackupProcessor<K, Set<V>> getBackupProcessor() {
-      return new EntryBackupProcessor<K, Set<V>>() {
-        @Override
-        public void processBackup(Map.Entry<K, Set<V>> entry) {
-          process(entry);
-        }
-      };
-    }
-  }
 }
