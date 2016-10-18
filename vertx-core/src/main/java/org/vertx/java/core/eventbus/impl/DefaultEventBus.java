@@ -16,6 +16,17 @@
 
 package org.vertx.java.core.eventbus.impl;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
 import org.slf4j.MDC;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
@@ -44,17 +55,6 @@ import org.vertx.java.core.spi.cluster.AsyncMultiMap;
 import org.vertx.java.core.spi.cluster.ChoosableIterable;
 import org.vertx.java.core.spi.cluster.ClusterManager;
 import org.vertx.java.core.spi.cluster.NodeListener;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * @author <a href="http://tfox.org">Tim Fox</a>
@@ -101,7 +101,7 @@ public class DefaultEventBus implements EventBus {
     this(vertx, port, hostname, clusterManager, null);
   }
 
-  public DefaultEventBus(VertxInternal vertx, int port, String hostname, ClusterManager clusterManager,
+  public DefaultEventBus(VertxInternal vertx, int port, String hostname, final ClusterManager clusterManager,
                          final Handler<AsyncResult<Void>> listenHandler) {
     this.vertx = vertx;
     this.clusterMgr = clusterManager;
@@ -110,10 +110,12 @@ public class DefaultEventBus implements EventBus {
     clusterMgr.addNodeListener(new NodeListener() {
       @Override
       public void nodeAdded(String nodeID, Map<String, Object> nodeAttributes) {
-        log.info("reregister all my handlers again in subs");
+        log.info("reregister all handler-addresses of this cluster node (" + serverID + ") after a cluster merge");
         for (Map.Entry<String, Handlers> handlersEntry : handlerMap.entrySet()) {
           for (HandlerHolder holder : handlersEntry.getValue().list) {
             if (!holder.localOnly) {
+              // after a cluster merge, we reregister all handler-addresses of this node, so the cluster will contain
+              // all known ServerIDs for a concrete address after a merge
               subs.add(handlersEntry.getKey(), serverID, listenHandler);
             }
           }
@@ -123,11 +125,15 @@ public class DefaultEventBus implements EventBus {
       @Override
       public void nodeLeft(String nodeID, Map<String, Object> nodeAttributes) {
         Object host = nodeAttributes.get(KEY_SERVER_ID_HOST);
-        Object port = nodeAttributes.get(KEY_SERVER_ID_HOST);
+        Object port = nodeAttributes.get(KEY_SERVER_ID_PORT);
         if (host instanceof String && port instanceof Number) {
+          int clusterMemberCount = clusterManager.getNodes().size();
           ServerID id = new ServerID(((Number) port).intValue(), (String) host);
-          log.info("remove all handlers of server " + id + " from cluster");
-          subs.removeAllForValue(id, null);
+          // only one member of the remaining cluster should do the removal of the serverId of the left member
+          if (id.hashCode() % clusterMemberCount == 0) {
+            log.info("remove serverId " + id + " from cluster");
+            subs.removeAllForValue(id, null);
+          }
         }
       }
     });

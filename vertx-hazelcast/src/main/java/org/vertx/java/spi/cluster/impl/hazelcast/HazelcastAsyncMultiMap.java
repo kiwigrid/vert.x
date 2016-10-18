@@ -39,6 +39,9 @@ import org.vertx.java.core.spi.cluster.ChoosableIterable;
 class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener<K, V> {
 
   private final VertxSPI vertx;
+  /**
+   * we use a IMap instead of a MultiMap (hazelcast) b/c the IMap supplies features like merge and split-brain handling.
+   */
   private final IMap<K, Set<V>> map;
 
   /*

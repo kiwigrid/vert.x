@@ -12,6 +12,9 @@ import com.hazelcast.nio.ObjectDataOutput;
 import com.hazelcast.nio.serialization.DataSerializable;
 
 /**
+ * This EntryProcessor enables MultiMap handling based on a IMap. It ensures that updating the Set (values) will be
+ * atomic.
+ *
  * @author <a href="mailto:andreas.berger@kiwigrid.com">Andreas Berger</a>
  */
 public class MultiMapEntryProcessor<K, V> implements EntryProcessor<K, Set<V>>, DataSerializable {
