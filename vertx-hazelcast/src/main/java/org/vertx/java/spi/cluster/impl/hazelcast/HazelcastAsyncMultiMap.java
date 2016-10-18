@@ -16,22 +16,24 @@
 
 package org.vertx.java.spi.cluster.impl.hazelcast;
 
-import java.util.Collection;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-
-import com.hazelcast.core.*;
-import com.hazelcast.map.EntryBackupProcessor;
+import com.hazelcast.core.EntryEvent;
+import com.hazelcast.core.MapEvent;
+import com.hazelcast.core.EntryListener;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.impl.DefaultFutureResult;
+import org.vertx.java.core.logging.Logger;
+import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.core.spi.Action;
 import org.vertx.java.core.spi.VertxSPI;
 import org.vertx.java.core.spi.cluster.AsyncMultiMap;
 import org.vertx.java.core.spi.cluster.ChoosableIterable;
+
+import java.util.Collection;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * @author <a href="http://tfox.org">Tim Fox</a>
@@ -39,10 +41,7 @@ import org.vertx.java.core.spi.cluster.ChoosableIterable;
 class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener<K, V> {
 
   private final VertxSPI vertx;
-  /**
-   * we use a IMap instead of a MultiMap (hazelcast) b/c the IMap supplies features like merge and split-brain handling.
-   */
-  private final IMap<K, Set<V>> map;
+  private final com.hazelcast.core.MultiMap<K, V> map;
 
   /*
    The Hazelcast near cache is very slow so we use our own one.
@@ -56,16 +55,23 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
     */
   private ConcurrentMap<K, ChoosableSet<V>> cache = new ConcurrentHashMap<>();
 
-  public HazelcastAsyncMultiMap(VertxSPI vertx, IMap<K, Set<V>> map) {
+  public HazelcastAsyncMultiMap(VertxSPI vertx, com.hazelcast.core.MultiMap<K, V> map) {
     this.vertx = vertx;
     this.map = map;
+    map.addEntryListener(this, true);
   }
 
   @Override
   public void removeAllForValue(final V val, final Handler<AsyncResult<Void>> completionHandler) {
     vertx.executeBlocking(new Action<Void>() {
       public Void perform() {
-        map.executeOnEntries(new MultiMapEntryProcessor<K, V>(HazelcastServerID.convertServerID(val), false));
+        V wrappedVal = HazelcastServerID.convertServerID(val);
+        for (Map.Entry<K, V> entry : map.entrySet()) {
+          V v = entry.getValue();
+          if (wrappedVal.equals(v)) {
+            map.remove(entry.getKey(), v);
+          }
+        }
         return null;
       }
     }, completionHandler);
@@ -73,23 +79,12 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
 
   @Override
   public void add(final K k, final V v, final Handler<AsyncResult<Void>> completionHandler) {
-    map.submitToKey(
-            k,
-            new MultiMapEntryProcessor<K, V>(HazelcastServerID.convertServerID(v), true),
-            new ExecutionCallback() {
-              @Override
-              public void onResponse(Object response) {
-                if (completionHandler != null)
-                  completionHandler.handle(new DefaultFutureResult<Void>());
-              }
-
-              @Override
-              public void onFailure(Throwable t) {
-                if (completionHandler != null)
-                  completionHandler.handle(new DefaultFutureResult<Void>(t));
-              }
-            }
-    );
+    vertx.executeBlocking(new Action<Void>() {
+      public Void perform() {
+        map.put(k, HazelcastServerID.convertServerID(v));
+        return null;
+      }
+    }, completionHandler);
   }
 
   @Override
@@ -140,7 +135,8 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
 
     vertx.executeBlocking(new Action<Void>() {
       public Void perform() {
-        map.executeOnKey(k, new MultiMapEntryProcessor<K, V>(HazelcastServerID.convertServerID(v), false));
+        V vv = HazelcastServerID.convertServerID(v);
+        map.remove(k, vv);
         return null;
       }
     }, completionHandler);

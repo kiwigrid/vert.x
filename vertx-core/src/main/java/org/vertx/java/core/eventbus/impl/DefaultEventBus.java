@@ -127,13 +127,9 @@ public class DefaultEventBus implements EventBus {
         Object host = nodeAttributes.get(KEY_SERVER_ID_HOST);
         Object port = nodeAttributes.get(KEY_SERVER_ID_PORT);
         if (host instanceof String && port instanceof Number) {
-          int clusterMemberCount = clusterManager.getNodes().size();
           ServerID id = new ServerID(((Number) port).intValue(), (String) host);
-          // only one member of the remaining cluster should do the removal of the serverId of the left member
-          if (id.hashCode() % clusterMemberCount == 0) {
-            log.info("remove serverId " + id + " from cluster");
-            subs.removeAllForValue(id, null);
-          }
+          log.info("remove serverId " + id + " from cluster");
+          subs.removeAllForValue(id, null);
         }
       }
     });
