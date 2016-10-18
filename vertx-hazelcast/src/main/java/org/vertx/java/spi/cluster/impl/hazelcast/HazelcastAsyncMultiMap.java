@@ -16,11 +16,15 @@
 
 package org.vertx.java.spi.cluster.impl.hazelcast;
 
-import com.hazelcast.core.*;
+import com.hazelcast.core.EntryEvent;
+import com.hazelcast.core.MapEvent;
+import com.hazelcast.core.EntryListener;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.impl.DefaultFutureResult;
+import org.vertx.java.core.logging.Logger;
+import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.core.spi.Action;
 import org.vertx.java.core.spi.VertxSPI;
 import org.vertx.java.core.spi.cluster.AsyncMultiMap;
@@ -51,29 +55,20 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
     */
   private ConcurrentMap<K, ChoosableSet<V>> cache = new ConcurrentHashMap<>();
 
-  public HazelcastAsyncMultiMap(VertxSPI vertx, HazelcastInstance hazelcastInstance,  MultiMap<K, V> map) {
+  public HazelcastAsyncMultiMap(VertxSPI vertx, com.hazelcast.core.MultiMap<K, V> map) {
     this.vertx = vertx;
     this.map = map;
     map.addEntryListener(this, true);
-    // This listener will keep the cache in sync with the Hazelcast MultiMap. If a merge occurs the cache will get
-    // evicted. This will not solve the missing merge feature of MultiMaps needed for split brains.
-    hazelcastInstance.getLifecycleService().addLifecycleListener(new LifecycleListener() {
-      @Override
-      public void stateChanged(LifecycleEvent event) {
-        if (event.getState() == LifecycleEvent.LifecycleState.MERGED){
-          cache.clear();
-        }
-      }
-    });
   }
 
   @Override
   public void removeAllForValue(final V val, final Handler<AsyncResult<Void>> completionHandler) {
     vertx.executeBlocking(new Action<Void>() {
       public Void perform() {
+        V wrappedVal = HazelcastServerID.convertServerID(val);
         for (Map.Entry<K, V> entry : map.entrySet()) {
           V v = entry.getValue();
-          if (val.equals(v)) {
+          if (wrappedVal.equals(v)) {
             map.remove(entry.getKey(), v);
           }
         }
@@ -140,7 +135,8 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
 
     vertx.executeBlocking(new Action<Void>() {
       public Void perform() {
-        map.remove(k, HazelcastServerID.convertServerID(v));
+        V vv = HazelcastServerID.convertServerID(v);
+        map.remove(k, vv);
         return null;
       }
     }, completionHandler);

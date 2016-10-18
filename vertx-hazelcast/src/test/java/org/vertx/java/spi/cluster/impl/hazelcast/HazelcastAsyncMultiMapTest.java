@@ -18,7 +18,6 @@ import org.vertx.java.core.spi.cluster.ChoosableIterable;
 
 import java.util.HashSet;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -74,10 +73,13 @@ public class HazelcastAsyncMultiMapTest {
           asyncResultHandler.handle(new DefaultFutureResult<>(result));
       }
     };
-    HazelcastAsyncMultiMap<String, String> map1 = new HazelcastAsyncMultiMap<>(vertx, h1, h1.<String, String>getMultiMap("foo"));
-    HazelcastAsyncMultiMap<String, String> map2 = new HazelcastAsyncMultiMap<>(vertx, h2, h2.<String, String>getMultiMap("foo"));
+    IMap<String, Set<String>> hzMap1 = h1.getMap("foo");
+    HazelcastAsyncMultiMap<String, String> map1 = new HazelcastAsyncMultiMap<>(vertx, hzMap1);
+    IMap<String, Set<String>> hzMap2 = h2.getMap("foo");
+    HazelcastAsyncMultiMap<String, String> map2 = new HazelcastAsyncMultiMap<>(vertx, hzMap2);
 
-    map1.add("key", "v0", null);
+
+    addValue(map1, "key", "v0");
 
     closeConnectionBetween(h1, h2);
 
@@ -85,25 +87,48 @@ public class HazelcastAsyncMultiMapTest {
     Assert.assertEquals(1, h1.getCluster().getMembers().size());
     Assert.assertEquals(1, h2.getCluster().getMembers().size());
 
-    map1.add("key", "v1", null);
-    map1.add("key", "v2", null);
+    addValue(map1, "key", "v1");
+    addValue(map1, "key", "v2");
 
-    map2.add("key", "v1", null);
-    map2.add("key", "v3", null);
-    map2.removeAllForValue("v0", null);
+    addValue(map2, "key", "v1");
+    addValue(map2, "key", "v3");
+
+    removeValue(map2, "v0");
 
     assertTrue(mergeLatch.await(30, TimeUnit.SECONDS));
     Assert.assertEquals(2, h1.getCluster().getMembers().size());
     Assert.assertEquals(2, h2.getCluster().getMembers().size());
 
-    TreeSet<Object> values = new TreeSet<>(h1.getMultiMap("foo").get("key"));
-    Assert.assertEquals(values, new TreeSet<>(h2.getMultiMap("foo").get("key")));
+    Set<String> values = hzMap1.get("key");
+    Assert.assertEquals(values, hzMap2.get("key"));
     assertEquals(values, map1);
     assertEquals(values, map2);
 
   }
 
-  private void assertEquals(final Set<Object> strings, HazelcastAsyncMultiMap<String, String> map) {
+  private void removeValue(HazelcastAsyncMultiMap<String, String> map, String value) throws InterruptedException {
+    final CountDownLatch waitLatch = new CountDownLatch(1);
+    map.removeAllForValue(value, new Handler<AsyncResult<Void>>() {
+      @Override
+      public void handle(AsyncResult<Void> event) {
+        waitLatch.countDown();
+      }
+    });
+    waitLatch.await(5, TimeUnit.SECONDS);
+  }
+
+  private void addValue(HazelcastAsyncMultiMap<String, String> map, String key, String value) throws InterruptedException {
+    final CountDownLatch waitLatch = new CountDownLatch(1);
+    map.add(key, value, new Handler<AsyncResult<Void>>() {
+      @Override
+      public void handle(AsyncResult<Void> event) {
+        waitLatch.countDown();
+      }
+    });
+    waitLatch.await(5, TimeUnit.SECONDS);
+  }
+
+  private void assertEquals(final Set<String> strings, HazelcastAsyncMultiMap<String, String> map) {
     map.get("key", new Handler<AsyncResult<ChoosableIterable<String>>>() {
       @Override
       public void handle(AsyncResult<ChoosableIterable<String>> event) {

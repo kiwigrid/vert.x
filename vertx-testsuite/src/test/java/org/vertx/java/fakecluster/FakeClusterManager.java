@@ -39,6 +39,7 @@ public class FakeClusterManager implements ClusterManager {
   private String nodeID;
   private NodeListener nodeListener;
   private VertxSPI vertx;
+  private Map<String, Object> attributes = new HashMap<>();
 
   public FakeClusterManager(VertxSPI vertx) {
     this.vertx = vertx;
@@ -50,7 +51,7 @@ public class FakeClusterManager implements ClusterManager {
     }
     nodes.put(nodeID, node);
     for (NodeListener listener: nodeListeners) {
-      listener.nodeAdded(nodeID);
+      listener.nodeAdded(nodeID, node.attributes);
     }
   }
 
@@ -58,9 +59,9 @@ public class FakeClusterManager implements ClusterManager {
     if (!nodes.containsKey(nodeID)) {
       throw new IllegalStateException("Node hasn't joined!");
     }
-    nodes.remove(nodeID);
+    FakeClusterManager node = nodes.remove(nodeID);
     for (NodeListener listener: nodeListeners) {
-      listener.nodeLeft(nodeID);
+      listener.nodeLeft(nodeID, node == null ? Collections.<String, Object>emptyMap() : node.attributes);
     }
 
   }
@@ -152,6 +153,21 @@ public class FakeClusterManager implements ClusterManager {
     }
     doLeave(nodeID);
     this.nodeID = null;
+  }
+
+  @Override
+  public void setNodeAttribute(String key, Object value) {
+    attributes.put(key, value);
+  }
+
+  @Override
+  public Object getNodeAttribute(String key) {
+    return attributes.get(key);
+  }
+
+  @Override
+  public void addNodeListener(NodeListener listener) {
+    doAddNodeListener(listener);
   }
 
   public static void reset() {

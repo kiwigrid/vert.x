@@ -83,4 +83,10 @@ public interface ClusterManager {
    * Leave the cluster
    */
   void leave();
+
+  void setNodeAttribute(String key, Object value);
+
+  Object getNodeAttribute(String key);
+
+  void addNodeListener(NodeListener listener);
 }

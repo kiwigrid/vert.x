@@ -55,7 +55,7 @@ public class HazelcastClusterManager implements ClusterManager, MembershipListen
   private String nodeID;
   private String membershipListenerId;
 
-  private NodeListener nodeListener;
+  private List<NodeListener> nodeListener = new ArrayList<>();
   private boolean active;
 
   /**
@@ -86,18 +86,18 @@ public class HazelcastClusterManager implements ClusterManager, MembershipListen
   }
 
 	/**
-	 * Every eventbus handler has an ID. SubsMap (subscriber map) is a MultiMap which 
-	 * maps handler-IDs with server-IDs and thus allows the eventbus to determine where 
+	 * Every eventbus handler has an ID. SubsMap (subscriber map) is a MultiMap which
+	 * maps handler-IDs with server-IDs and thus allows the eventbus to determine where
 	 * to send messages.
-	 * 
-	 * @param name A unique name by which the the MultiMap can be identified within the cluster. 
+	 *
+	 * @param name A unique name by which the the MultiMap can be identified within the cluster.
 	 *     See the cluster config file (e.g. cluster.xml in case of HazelcastClusterManager) for
 	 *     additional MultiMap config parameters.
 	 * @return subscription map
 	 */
   public <K, V> AsyncMultiMap<K, V> getAsyncMultiMap(final String name) {
-    com.hazelcast.core.MultiMap<K,V> map = hazelcast.getMultiMap(name);
-    return new HazelcastAsyncMultiMap<>(vertx, hazelcast, map);
+    com.hazelcast.core.MultiMap map = hazelcast.getMultiMap(name);
+    return new HazelcastAsyncMultiMap(vertx, map);
   }
 
   @Override
@@ -117,8 +117,14 @@ public class HazelcastClusterManager implements ClusterManager, MembershipListen
 
   @Override
   public void nodeListener(NodeListener listener) {
-    this.nodeListener = listener;
+    addNodeListener(listener);
   }
+
+  @Override
+  public void addNodeListener(NodeListener listener) {
+    this.nodeListener.add(listener);
+  }
+
 
   @Override
   public <K, V> AsyncMap<K, V> getAsyncMap(String name) {
@@ -147,14 +153,49 @@ public class HazelcastClusterManager implements ClusterManager, MembershipListen
   }
 
   @Override
+  public void setNodeAttribute(String key, Object value) {
+    Member localMember = hazelcast.getCluster().getLocalMember();
+    if (value == null){
+      localMember.removeAttribute(key);
+      return;
+    }
+    if (value instanceof String){
+      localMember.setStringAttribute(key, (String) value);
+    } else if (value instanceof Integer){
+      localMember.setIntAttribute(key, (Integer) value);
+    } else if (value instanceof Long){
+      localMember.setLongAttribute(key, (Long) value);
+    } else if (value instanceof Double){
+      localMember.setDoubleAttribute(key, (Double) value);
+    } else if (value instanceof Float){
+      localMember.setFloatAttribute(key, (Float) value);
+    } else if (value instanceof Boolean){
+      localMember.setBooleanAttribute(key, (Boolean) value);
+    } else if (value instanceof Byte){
+      localMember.setByteAttribute(key, (Byte) value);
+    } else if (value instanceof Short){
+      localMember.setShortAttribute(key, (Short) value);
+    } else {
+      throw new IllegalArgumentException(value.getClass().getName() + " is not supported as attribute");
+    }
+  }
+
+  @Override
+  public Object getNodeAttribute(String key) {
+    return hazelcast.getCluster().getLocalMember().getAttributes().get(key);
+  }
+
+  @Override
   public synchronized void memberAdded(MembershipEvent membershipEvent) {
     if (!active) {
       return;
     }
     try {
-      if (nodeListener != null) {
+      if (!nodeListener.isEmpty()) {
         Member member = membershipEvent.getMember();
-        nodeListener.nodeAdded(member.getUuid());
+        for (NodeListener listener : nodeListener) {
+          listener.nodeAdded(member.getUuid(), member.getAttributes());
+        }
       }
     } catch (Throwable t) {
       log.error("Failed to handle memberAdded", t);
@@ -167,9 +208,11 @@ public class HazelcastClusterManager implements ClusterManager, MembershipListen
       return;
     }
     try {
-      if (nodeListener != null) {
+      if (!nodeListener.isEmpty()) {
         Member member = membershipEvent.getMember();
-        nodeListener.nodeLeft(member.getUuid());
+        for (NodeListener listener : nodeListener) {
+          listener.nodeLeft(member.getUuid(), member.getAttributes());
+        }
       }
     } catch (Throwable t) {
       log.error("Failed to handle memberRemoved", t);

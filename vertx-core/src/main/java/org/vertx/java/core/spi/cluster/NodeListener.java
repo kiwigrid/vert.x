@@ -15,6 +15,8 @@
  */
 package org.vertx.java.core.spi.cluster;
 
+import java.util.Map;
+
 /**
  *
  * A NodeListener is called when nodes join or leave the cluster
@@ -26,12 +28,14 @@ public interface NodeListener {
   /**
    * A node has been added
    * @param nodeID The unique ID of the node
+   * @param nodeAttributes the Attributes of the Node
    */
-  void nodeAdded(String nodeID);
+  void nodeAdded(String nodeID, Map<String, Object> nodeAttributes);
 
   /**
    * A node has left
    * @param nodeID  The unique ID of the node
+   * @param nodeAttributes the Attributes of the Node
    */
-  void nodeLeft(String nodeID);
+  void nodeLeft(String nodeID, Map<String, Object> nodeAttributes);
 }

@@ -16,6 +16,17 @@
 
 package org.vertx.java.core.eventbus.impl;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
 import org.slf4j.MDC;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
@@ -43,22 +54,15 @@ import org.vertx.java.core.parsetools.RecordParser;
 import org.vertx.java.core.spi.cluster.AsyncMultiMap;
 import org.vertx.java.core.spi.cluster.ChoosableIterable;
 import org.vertx.java.core.spi.cluster.ClusterManager;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
+import org.vertx.java.core.spi.cluster.NodeListener;
 
 /**
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public class DefaultEventBus implements EventBus {
+
+  private static final String KEY_SERVER_ID_HOST = "ServerID.host";
+  private static final String KEY_SERVER_ID_PORT = "ServerID.port";
 
   public enum LoadBalanceMode {
     RoundRobin,
@@ -97,12 +101,38 @@ public class DefaultEventBus implements EventBus {
     this(vertx, port, hostname, clusterManager, null);
   }
 
-  public DefaultEventBus(VertxInternal vertx, int port, String hostname, ClusterManager clusterManager,
-                         Handler<AsyncResult<Void>> listenHandler) {
+  public DefaultEventBus(VertxInternal vertx, int port, String hostname, final ClusterManager clusterManager,
+                         final Handler<AsyncResult<Void>> listenHandler) {
     this.vertx = vertx;
     this.clusterMgr = clusterManager;
     this.subs = clusterMgr.getAsyncMultiMap("subs");
     this.server = setServer(port, hostname, listenHandler);
+    clusterMgr.addNodeListener(new NodeListener() {
+      @Override
+      public void nodeAdded(String nodeID, Map<String, Object> nodeAttributes) {
+        log.info("reregister all handler-addresses of this cluster node (" + serverID + ") after a cluster merge");
+        for (Map.Entry<String, Handlers> handlersEntry : handlerMap.entrySet()) {
+          for (HandlerHolder holder : handlersEntry.getValue().list) {
+            if (!holder.localOnly) {
+              // after a cluster merge, we reregister all handler-addresses of this node, so the cluster will contain
+              // all known ServerIDs for a concrete address after a merge
+              subs.add(handlersEntry.getKey(), serverID, listenHandler);
+            }
+          }
+        }
+      }
+
+      @Override
+      public void nodeLeft(String nodeID, Map<String, Object> nodeAttributes) {
+        Object host = nodeAttributes.get(KEY_SERVER_ID_HOST);
+        Object port = nodeAttributes.get(KEY_SERVER_ID_PORT);
+        if (host instanceof String && port instanceof Number) {
+          ServerID id = new ServerID(((Number) port).intValue(), (String) host);
+          log.info("remove serverId " + id + " from cluster");
+          subs.removeAllForValue(id, null);
+        }
+      }
+    });
     setLoadBalanceMode();
   }
 
@@ -634,6 +664,10 @@ public class DefaultEventBus implements EventBus {
           DefaultEventBus.this.serverID = new ServerID(serverPort, serverHost);
           log.info("Registering EventBus with serverID=" + serverID);
           ManagementRegistry.registerEventBus(serverID);
+          if (clusterMgr != null) {
+            clusterMgr.setNodeAttribute(KEY_SERVER_ID_HOST, serverID.host);
+            clusterMgr.setNodeAttribute(KEY_SERVER_ID_PORT, serverID.port);
+          }
         }
         if (listenHandler != null) {
           if (asyncResult.succeeded()) {
@@ -854,18 +888,7 @@ public class DefaultEventBus implements EventBus {
     completionHandler.handle(new DefaultFutureResult<>((Void) null));
   }
 
-  private void cleanSubsForServerID(ServerID theServerID) {
-    if (subs != null) {
-      subs.removeAllForValue(theServerID, new Handler<AsyncResult<Void>>() {
-        public void handle(AsyncResult<Void> event) {
-        }
-      });
-    }
-  }
-
-  private void cleanupConnection(ServerID theServerID,
-                                 ConnectionHolder holder,
-                                 boolean failed) {
+  private void cleanupConnection(ServerID theServerID, ConnectionHolder holder) {
     if (holder.timeoutID != -1) {
       vertx.cancelTimer(holder.timeoutID);
     }
@@ -882,11 +905,6 @@ public class DefaultEventBus implements EventBus {
     // So we only actually remove the entry if no new entry has been added
     if (connections.remove(theServerID, holder)) {
       log.info("Cluster connection closed: " + theServerID + " holder " + holder);
-
-      if (failed) {
-        log.info("Cleaning up subs map for server " + theServerID);
-        cleanSubsForServerID(theServerID);
-      }
     }
   }
 
@@ -922,7 +940,7 @@ public class DefaultEventBus implements EventBus {
           public void handle(Long timerID) {
             // Didn't get pong in time - consider connection dead
             log.warn("No pong from server " + serverID + " - will consider it dead, timerID: " + timerID + " holder " + holder);
-            cleanupConnection(holder.theServerID, holder, true);
+            cleanupConnection(holder.theServerID, holder);
           }
         });
         new PingMessage(serverID).write(holder.socket);
@@ -1088,13 +1106,13 @@ public class DefaultEventBus implements EventBus {
       socket.exceptionHandler(new Handler<Throwable>() {
         public void handle(Throwable t) {
           log.error("Socket exception, cleaning up connection.", t);
-          cleanupConnection(theServerID, ConnectionHolder.this, true);
+          cleanupConnection(theServerID, ConnectionHolder.this);
         }
       });
       socket.closeHandler(new VoidHandler() {
         public void handle() {
           log.info("Socket closed, cleaning up connection.");
-          cleanupConnection(theServerID, ConnectionHolder.this, false);
+          cleanupConnection(theServerID, ConnectionHolder.this);
         }
       });
       socket.dataHandler(new Handler<Buffer>() {
@@ -1119,7 +1137,7 @@ public class DefaultEventBus implements EventBus {
             connected(theServerID, res.result());
           } else {
             log.error("Could not connect to " + theServerID + " closing connection.", res.cause());
-            cleanupConnection(theServerID, ConnectionHolder.this, true);
+            cleanupConnection(theServerID, ConnectionHolder.this);
           }
         }
       });
