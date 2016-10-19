@@ -16,15 +16,11 @@
 
 package org.vertx.java.spi.cluster.impl.hazelcast;
 
-import com.hazelcast.core.EntryEvent;
-import com.hazelcast.core.MapEvent;
-import com.hazelcast.core.EntryListener;
+import com.hazelcast.core.*;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.impl.DefaultFutureResult;
-import org.vertx.java.core.logging.Logger;
-import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.core.spi.Action;
 import org.vertx.java.core.spi.VertxSPI;
 import org.vertx.java.core.spi.cluster.AsyncMultiMap;
@@ -38,7 +34,7 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
-class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener<K, V> {
+class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener<K, V>, MembershipListener {
 
   private final VertxSPI vertx;
   private final com.hazelcast.core.MultiMap<K, V> map;
@@ -55,10 +51,11 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
     */
   private ConcurrentMap<K, ChoosableSet<V>> cache = new ConcurrentHashMap<>();
 
-  public HazelcastAsyncMultiMap(VertxSPI vertx, com.hazelcast.core.MultiMap<K, V> map) {
+  public HazelcastAsyncMultiMap(VertxSPI vertx, HazelcastInstance hazelcast, String name) {
     this.vertx = vertx;
-    this.map = map;
+    this.map = hazelcast.getMultiMap(name);;
     map.addEntryListener(this, true);
+    hazelcast.getCluster().addMembershipListener(this);
   }
 
   @Override
@@ -196,4 +193,18 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
     entryRemoved(entry);
   }
 
+  @Override
+  public void memberAdded(MembershipEvent membershipEvent) {
+    cache.clear();
+  }
+
+  @Override
+  public void memberRemoved(MembershipEvent membershipEvent) {
+    cache.clear();
+  }
+
+  @Override
+  public void memberAttributeChanged(MemberAttributeEvent memberAttributeEvent) {
+
+  }
 }

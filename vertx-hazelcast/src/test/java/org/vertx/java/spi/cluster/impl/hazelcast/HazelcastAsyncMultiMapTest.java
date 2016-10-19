@@ -74,9 +74,9 @@ public class HazelcastAsyncMultiMapTest {
       }
     };
     IMap<String, Set<String>> hzMap1 = h1.getMap("foo");
-    HazelcastAsyncMultiMap<String, String> map1 = new HazelcastAsyncMultiMap<>(vertx, hzMap1);
+    HazelcastAsyncMultiMap<String, String> map1 = new HazelcastAsyncMultiMap<>(vertx, h1, "foo");
     IMap<String, Set<String>> hzMap2 = h2.getMap("foo");
-    HazelcastAsyncMultiMap<String, String> map2 = new HazelcastAsyncMultiMap<>(vertx, hzMap2);
+    HazelcastAsyncMultiMap<String, String> map2 = new HazelcastAsyncMultiMap<>(vertx, h2, "foo");
 
 
     addValue(map1, "key", "v0");
