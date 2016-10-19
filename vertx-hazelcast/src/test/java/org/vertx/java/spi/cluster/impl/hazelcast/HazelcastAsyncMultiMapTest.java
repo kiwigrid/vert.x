@@ -16,6 +16,7 @@ import org.vertx.java.core.impl.DefaultVertx;
 import org.vertx.java.core.spi.Action;
 import org.vertx.java.core.spi.cluster.ChoosableIterable;
 
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -73,9 +74,9 @@ public class HazelcastAsyncMultiMapTest {
           asyncResultHandler.handle(new DefaultFutureResult<>(result));
       }
     };
-    IMap<String, Set<String>> hzMap1 = h1.getMap("foo");
+    MultiMap<String, String> hzMap1 = h1.getMultiMap("foo");
     HazelcastAsyncMultiMap<String, String> map1 = new HazelcastAsyncMultiMap<>(vertx, h1, "foo");
-    IMap<String, Set<String>> hzMap2 = h2.getMap("foo");
+    MultiMap<String, String> hzMap2 = h2.getMultiMap("foo");
     HazelcastAsyncMultiMap<String, String> map2 = new HazelcastAsyncMultiMap<>(vertx, h2, "foo");
 
 
@@ -99,7 +100,7 @@ public class HazelcastAsyncMultiMapTest {
     Assert.assertEquals(2, h1.getCluster().getMembers().size());
     Assert.assertEquals(2, h2.getCluster().getMembers().size());
 
-    Set<String> values = hzMap1.get("key");
+    Collection<String> values = hzMap1.get("key");
     Assert.assertEquals(values, hzMap2.get("key"));
     assertEquals(values, map1);
     assertEquals(values, map2);
@@ -128,7 +129,7 @@ public class HazelcastAsyncMultiMapTest {
     waitLatch.await(5, TimeUnit.SECONDS);
   }
 
-  private void assertEquals(final Set<String> strings, HazelcastAsyncMultiMap<String, String> map) {
+  private void assertEquals(final Collection<String> strings, HazelcastAsyncMultiMap<String, String> map) {
     map.get("key", new Handler<AsyncResult<ChoosableIterable<String>>>() {
       @Override
       public void handle(AsyncResult<ChoosableIterable<String>> event) {

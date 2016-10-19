@@ -25,6 +25,7 @@ import org.vertx.java.core.spi.cluster.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.RejectedExecutionException;
 
 public class FakeClusterManager implements ClusterManager {
 
@@ -261,26 +262,29 @@ public class FakeClusterManager implements ClusterManager {
 
     @Override
     public void removeAllForValue(final V v, Handler<AsyncResult<Void>> completionHandler) {
-      vertx.executeBlocking(new Action<Void>() {
-        public Void perform() {
-          Iterator<Map.Entry<K, ChoosableSet<V>>> mapIter = map.entrySet().iterator();
-          while (mapIter.hasNext()) {
-            Map.Entry<K, ChoosableSet<V>> entry = mapIter.next();
-            ChoosableSet<V> vals = entry.getValue();
-            Iterator<V> iter = vals.iterator();
-            while (iter.hasNext()) {
-              V val = iter.next();
-              if (val.equals(v)) {
-                iter.remove();
+      try {
+        vertx.executeBlocking(new Action<Void>() {
+          public Void perform() {
+            Iterator<Map.Entry<K, ChoosableSet<V>>> mapIter = map.entrySet().iterator();
+            while (mapIter.hasNext()) {
+              Map.Entry<K, ChoosableSet<V>> entry = mapIter.next();
+              ChoosableSet<V> vals = entry.getValue();
+              Iterator<V> iter = vals.iterator();
+              while (iter.hasNext()) {
+                V val = iter.next();
+                if (val.equals(v)) {
+                  iter.remove();
+                }
+              }
+              if (vals.isEmpty()) {
+                mapIter.remove();
               }
             }
-            if (vals.isEmpty()) {
-              mapIter.remove();
-            }
+            return null;
           }
-          return null;
-        }
-      }, completionHandler);
+        }, completionHandler);
+      } catch (RejectedExecutionException ignore) {
+      }
     }
   }
 }

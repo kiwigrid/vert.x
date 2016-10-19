@@ -147,7 +147,7 @@ public class HazelcastClusterManager implements ClusterManager, MembershipListen
         log.warn("Unable to remove membership listener");
     }
 
- 	hazelcast.getLifecycleService().shutdown();
+    hazelcast.getLifecycleService().shutdown();
     active = false;
   }
 
