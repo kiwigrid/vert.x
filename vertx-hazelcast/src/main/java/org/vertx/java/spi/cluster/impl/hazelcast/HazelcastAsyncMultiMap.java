@@ -53,7 +53,7 @@ class HazelcastAsyncMultiMap<K, V> implements AsyncMultiMap<K, V>, EntryListener
 
   public HazelcastAsyncMultiMap(VertxSPI vertx, HazelcastInstance hazelcast, String name) {
     this.vertx = vertx;
-    this.map = hazelcast.getMultiMap(name);;
+    this.map = hazelcast.getMultiMap(name);
     map.addEntryListener(this, true);
     hazelcast.getCluster().addMembershipListener(this);
   }
