@@ -28,8 +28,8 @@ public class HazelcastTestUtil {
     Node n1 = HazelcastTestUtil.getNode(h1);
     Node n2 = HazelcastTestUtil.getNode(h2);
     if (n1 != null && n2 != null) {
-      n1.clusterService.removeAddress(n2.address);
-      n2.clusterService.removeAddress(n1.address);
+      n1.clusterService.removeAddress(n2.address, "test reason 2");
+      n2.clusterService.removeAddress(n1.address, "test reason 1");
     }
   }
 }
