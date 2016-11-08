@@ -23,6 +23,7 @@ import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.platform.PlatformLocator;
 import org.vertx.java.platform.PlatformManager;
+import org.vertx.java.platform.configuration.ConfigurationLoader;
 import org.vertx.java.platform.impl.Args;
 import org.vertx.java.platform.impl.resolver.HttpResolution;
 
@@ -296,22 +297,28 @@ public class Starter {
       instances = 1;
     }
 
-    String configFile = args.map.get("-conf");
+    String configFilePath = args.map.get("-conf");
     JsonObject conf;
 
-    if (configFile != null) {
-      try (Scanner scanner = new Scanner(new File(configFile)).useDelimiter("\\A")){
-        String sconf = scanner.next();
-        try {
-          conf = new JsonObject(sconf);
-        } catch (DecodeException e) {
-          log.error("Configuration file does not contain a valid JSON object");
-          return;
-        }
-      } catch (FileNotFoundException e) {
-        log.error("Config file " + configFile + " does not exist");
-        return;
-      }
+    if (configFilePath != null) {
+	  String configLoader = args.map.get("-confloader");
+	  String configContent;
+	  if(configLoader != null){
+		configContent = loadConfig(configLoader, configFilePath);		
+	  }
+	  else{
+		  try {
+			  configContent = loadConfig(configFilePath);
+		  } catch (FileNotFoundException e) {
+			  return;
+		  }
+	  }
+	  try {
+		conf = new JsonObject(configContent);
+	  } catch (DecodeException e) {
+		log.error("Configuration file does not contain a valid JSON object");
+		return;
+	  }      
     } else {
       conf = null;
     }
@@ -376,7 +383,48 @@ public class Starter {
     block();
   }
 
-  private void block() {
+	private String loadConfig(String configFilePath) throws FileNotFoundException {
+		String configContent;
+		try (Scanner scanner = new Scanner(new File(configFilePath)).useDelimiter("\\A")){
+			configContent = scanner.next();
+		} catch (FileNotFoundException e) {
+			log.error("Config file " + configFilePath + " does not exist");
+			throw e;
+		}
+		return configContent;
+	}
+
+	private String loadConfig(String configLoader, String configFilePath) {
+		ConfigurationLoader loader = getConfigurationLoader(configLoader);
+		return loader.load(configFilePath);
+	}
+
+	private ConfigurationLoader getConfigurationLoader(String configLoader)
+	{
+		Class<?> clazz;
+		try {
+		  clazz = Class.forName(configLoader);
+		} catch (ClassNotFoundException e) {
+		  log.error(String.format("%s could not be found"), e);
+		  throw new IllegalArgumentException(e);
+		}
+		if(!ConfigurationLoader.class.isAssignableFrom(clazz)){
+		  String errorMessage = String.format("%s does not implement ConfigurationLoader interface", configLoader);
+		  IllegalArgumentException e = new IllegalArgumentException(errorMessage);
+		  log.error(String.format("%s does not implement ConfigurationLoader interface", configLoader), e);
+		  throw e;
+		}
+		try {
+		  return (ConfigurationLoader) clazz.newInstance();
+		} catch (InstantiationException | IllegalAccessException e) {
+			String errorMessage = String.format(
+					"%s does not have a public default constructor or cannot be instantiated (is it a abstract class?)");
+			log.error(errorMessage, e);
+		  throw new IllegalArgumentException(e);
+		}
+	}
+
+	private void block() {
     while (true) {
       try {
         stopLatch.await();
