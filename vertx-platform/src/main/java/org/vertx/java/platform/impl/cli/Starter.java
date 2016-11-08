@@ -304,13 +304,17 @@ public class Starter {
 	  String configLoader = args.map.get("-confloader");
 	  String configContent;
 	  if(configLoader != null){
-		configContent = loadConfig(configLoader, configFilePath);		
+		try {  
+		  configContent = loadConfig(configLoader, configFilePath);
+	  	} catch (IOException e) {
+		  return;
+		}
 	  }
 	  else{
 		  try {
-			  configContent = loadConfig(configFilePath);
+		    configContent = loadConfig(configFilePath);
 		  } catch (FileNotFoundException e) {
-			  return;
+		    return;
 		  }
 	  }
 	  try {
@@ -394,9 +398,14 @@ public class Starter {
 		return configContent;
 	}
 
-	private String loadConfig(String configLoader, String configFilePath) {
+	private String loadConfig(String configLoader, String configFilePath) throws IOException {
 		ConfigurationLoader loader = getConfigurationLoader(configLoader);
-		return loader.load(configFilePath);
+		try {
+			return loader.load(configFilePath);
+		} catch (IOException e) {
+			log.error("Config file " + configFilePath + " could not be load by loader " + configLoader + ". reason: "+ e.getMessage(), e);
+			throw e;
+		}
 	}
 
 	private ConfigurationLoader getConfigurationLoader(String configLoader)
