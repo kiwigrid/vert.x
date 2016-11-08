@@ -8,4 +8,5 @@ package org.vertx.java.platform.configuration;
 public interface ConfigurationLoader {
 	
 	String load(String configFilePath);
+	
 }
