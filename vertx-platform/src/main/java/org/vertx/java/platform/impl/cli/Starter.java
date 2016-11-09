@@ -316,8 +316,7 @@ public class Starter {
         } catch (DecodeException e) {
           log.error("Configuration file does not contain a valid JSON object");
           return;
-        }
-        catch (FileNotFoundException e) {
+        } catch (FileNotFoundException e) {
           log.error("Config file " + configFilePath + " does not exist");
           return;
         }
