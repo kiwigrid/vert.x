@@ -302,15 +302,14 @@ public class Starter {
 
     if (configFilePath != null) {
       String configLoader = args.map.get("-confloader");
-      if(configLoader != null){
+      if (configLoader != null) {
         try {  
           conf = getConfigurationLoader(configLoader).load(configFilePath);
           } catch (Exception e) {
           log.error("Could not load configuration file: " + configFilePath, e);  
           return;
         }
-      }
-      else{
+      } else {
         try {
           conf = loadWithDefaultLoader(configFilePath);
         } catch (DecodeException e) {
@@ -385,45 +384,44 @@ public class Starter {
     block();
   }
 
-    private JsonObject loadWithDefaultLoader(String configFilePath) throws FileNotFoundException {
-        String configContent = loadConfig(configFilePath);
-        return new JsonObject(configContent);
-    }
+  private JsonObject loadWithDefaultLoader(String configFilePath) throws FileNotFoundException {
+    String configContent = loadConfig(configFilePath);
+    return new JsonObject(configContent);
+  }
 
-    private String loadConfig(String configFilePath) throws FileNotFoundException {
-      String configContent;
-      try (Scanner scanner = new Scanner(new File(configFilePath)).useDelimiter("\\A")){
-        configContent = scanner.next();
-      } 
-      return configContent;
-    }
+  private String loadConfig(String configFilePath) throws FileNotFoundException {
+    String configContent;
+    try (Scanner scanner = new Scanner(new File(configFilePath)).useDelimiter("\\A")) {
+      configContent = scanner.next();
+    } 
+    return configContent;
+  }
 
-    private ConfigurationLoader getConfigurationLoader(String configLoader)
-    {
-      Class<?> clazz;
-      try {
-        clazz = Class.forName(configLoader);
-      } catch (ClassNotFoundException e) {
-        log.error(String.format("%s could not be found"), e);
-        throw new IllegalArgumentException(e);
-      }
-      if(!ConfigurationLoader.class.isAssignableFrom(clazz)){
-        String errorMessage = String.format("%s does not implement ConfigurationLoader interface", configLoader);
-        IllegalArgumentException e = new IllegalArgumentException(errorMessage);
-        log.error(String.format("%s does not implement ConfigurationLoader interface", configLoader), e);
-        throw e;
-      }
-      try {
-        return (ConfigurationLoader) clazz.newInstance();
-      } catch (InstantiationException | IllegalAccessException e) {
-        String errorMessage = String.format(
-                  "%s does not have a public default constructor or cannot be instantiated (is it a abstract class?)");
-        log.error(errorMessage, e);
-        throw new IllegalArgumentException(e);
-      }
+  private ConfigurationLoader getConfigurationLoader(String configLoader) {
+    Class<?> clazz;
+    try {
+      clazz = Class.forName(configLoader);
+    } catch (ClassNotFoundException e) {
+      log.error(String.format("%s could not be found"), e);
+      throw new IllegalArgumentException(e);
     }
+    if (!ConfigurationLoader.class.isAssignableFrom(clazz)) {
+      String errorMessage = String.format("%s does not implement ConfigurationLoader interface", configLoader);
+      IllegalArgumentException e = new IllegalArgumentException(errorMessage);
+      log.error(String.format("%s does not implement ConfigurationLoader interface", configLoader), e);
+      throw e;
+    }
+    try {
+      return (ConfigurationLoader) clazz.newInstance();
+    } catch (InstantiationException | IllegalAccessException e) {
+      String errorMessage = String.format(
+                "%s does not have a public default constructor or cannot be instantiated (is it a abstract class?)");
+      log.error(errorMessage, e);
+      throw new IllegalArgumentException(e);
+    }
+  }
 
-    private void block() {
+  private void block() {
     while (true) {
       try {
         stopLatch.await();

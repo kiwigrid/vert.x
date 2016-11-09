@@ -1,7 +1,5 @@
 package org.vertx.java.platform.configuration;
 
-import java.io.IOException;
-
 import org.vertx.java.core.json.JsonObject;
 
 /**
@@ -11,11 +9,11 @@ import org.vertx.java.core.json.JsonObject;
  */
 public interface ConfigurationLoader {
 
-	/**
-	 * This method reads a file and returns its content as a string.
-	 * @param configFilePath the full path to the file
-	 * @return the file content as string
-	 */
-	JsonObject load(String configFilePath) throws Exception;
-	
+  /**
+   * This method reads a file and returns its content as a string.
+   * @param configFilePath the full path to the file
+   * @return the file content as string
+   */
+  JsonObject load(String configFilePath) throws Exception;
+    
 }
