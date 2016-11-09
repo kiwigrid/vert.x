@@ -15,87 +15,86 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 public class StarterTest {
-	
-	private Starter starter = new Starter();
-	
-	@Test(expected = FileNotFoundException.class)
-	public void loadConfigurationJsonThrowsFileNotFoundWithDefaultLoaderIfFileNotExist() throws Exception {
-		starter.loadConfigurationJson("iDoNotExist", null);
-	}
-	
-	@Test
-	public void loadConfigurationJsonReturnsFileContentWithDefaultLoader() throws Exception {
-		String filePath = "startertest/well-formed.json";
-		String fullPath = getFullPath(filePath);
+  
+  private Starter starter = new Starter();
+  
+  @Test(expected = FileNotFoundException.class)
+  public void loadConfigurationJsonThrowsFileNotFoundWithDefaultLoaderIfFileNotExist() throws Exception {
+    starter.loadConfigurationJson("iDoNotExist", null);
+  }
+  
+  @Test
+  public void loadConfigurationJsonReturnsFileContentWithDefaultLoader() throws Exception {
+    String filePath = "startertest/well-formed.json";
+    String fullPath = getFullPath(filePath);
 
-		JsonObject loadedContent = starter.loadConfigurationJson(fullPath, null);
+    JsonObject loadedContent = starter.loadConfigurationJson(fullPath, null);
 
-		JsonObject expectedContent = new JsonObject(loadFile(fullPath));
+    JsonObject expectedContent = new JsonObject(loadFile(fullPath));
 
-		assertEquals("There was some discrepancy between the file content and returned from load method",
-				expectedContent.toString(),
-				loadedContent.toString());
-	}
-	
-	@Test
-	public void loadConfigurationJsonCallsCustomLoaderIfDefined() throws Exception {
-		String fullPath = "notImportantPath";
-		JsonObject loadedContent = starter.loadConfigurationJson(fullPath, "org.vertx.java.platform.impl.cli.StarterTest$ConfigLoaderStub");
-		
-		String result = loadedContent.getString("status");
-		
-		assertEquals("", "success", result);
-	}
-	
-	@Test(expected = IllegalArgumentException.class)
-	public void loadConfigurationThrowsIllegalArgumentExceptionIfCustomLoaderDoesNotExist() throws Exception {
-		String fullPath = "notImportantPath";
-		starter.loadConfigurationJson(fullPath, "classLoaderThatDoesNotExist");
-	}
+    assertEquals("There was some discrepancy between the file content and returned from load method",
+        expectedContent.toString(),
+        loadedContent.toString());
+  }
+  
+  @Test
+  public void loadConfigurationJsonCallsCustomLoaderIfDefined() throws Exception {
+    String fullPath = "notImportantPath";
+    JsonObject loadedContent = starter.loadConfigurationJson(fullPath, "org.vertx.java.platform.impl.cli.StarterTest$ConfigLoaderStub");
+    
+    String result = loadedContent.getString("status");
+    
+    assertEquals("", "success", result);
+  }
+  
+  @Test(expected = IllegalArgumentException.class)
+  public void loadConfigurationThrowsIllegalArgumentExceptionIfCustomLoaderDoesNotExist() throws Exception {
+    String fullPath = "notImportantPath";
+    starter.loadConfigurationJson(fullPath, "classLoaderThatDoesNotExist");
+  }
 
-	@Test(expected = IllegalArgumentException.class)
-	public void loadConfigurationThrowsIllegalArgumentExceptionIfCustomLoaderDoesNotImplementInterface() throws Exception {
-		String fullPath = "notImportantPath";
-		JsonObject loadedContent = starter.loadConfigurationJson(fullPath, "org.vertx.java.platform.impl.cli.StarterTest$ConfigLoaderStubThatDoesNotImplementInterface");
+  @Test(expected = IllegalArgumentException.class)
+  public void loadConfigurationThrowsIllegalArgumentExceptionIfCustomLoaderDoesNotImplementInterface() throws Exception {
+    String fullPath = "notImportantPath";
+    JsonObject loadedContent = starter.loadConfigurationJson(fullPath, "org.vertx.java.platform.impl.cli.StarterTest$ConfigLoaderStubThatDoesNotImplementInterface");
 
-		String result = loadedContent.getString("status");
+    String result = loadedContent.getString("status");
 
-		assertEquals("", "success", result);
-	}
+    assertEquals("", "success", result);
+  }
 
-	@Test(expected = IllegalArgumentException.class)
-	public void loadConfigurationThrowsIllegalArgumentExceptionIfCustomLoaderIsNotInstantiable() throws Exception {
-		String fullPath = "notImportantPath";
-		JsonObject loadedContent = starter.loadConfigurationJson(fullPath, "org.vertx.java.platform.impl.cli.StarterTest$ConfigLoaderStubThatIsNotInstantiable");
+  @Test(expected = IllegalArgumentException.class)
+  public void loadConfigurationThrowsIllegalArgumentExceptionIfCustomLoaderIsNotInstantiable() throws Exception {
+    String fullPath = "notImportantPath";
+    JsonObject loadedContent = starter.loadConfigurationJson(fullPath, "org.vertx.java.platform.impl.cli.StarterTest$ConfigLoaderStubThatIsNotInstantiable");
 
-		String result = loadedContent.getString("status");
+    String result = loadedContent.getString("status");
 
-		assertEquals("", "success", result);
-	}
+    assertEquals("", "success", result);
+  }
 
-	private String getFullPath(String filePath) throws URISyntaxException {
-		return getClass().getClassLoader().getResource(filePath).getPath();
-	}
+  private String getFullPath(String filePath) throws URISyntaxException {
+    return getClass().getClassLoader().getResource(filePath).getPath();
+  }
 
-	private String loadFile(String fullPath) throws IOException, URISyntaxException {
-		return new String(Files.readAllBytes(Paths.get(fullPath)));
-	}
-	
-	public static class ConfigLoaderStub implements ConfigurationLoader{
+  private String loadFile(String fullPath) throws IOException, URISyntaxException {
+    return new String(Files.readAllBytes(Paths.get(fullPath)));
+  }
+  
+  public static class ConfigLoaderStub implements ConfigurationLoader {
+    @Override
+    public JsonObject load(String configFilePath) throws Exception {
+      return new JsonObject("{\"status\":\"success\"}");
+    }
+  }
+  
+  public static class ConfigLoaderStubThatDoesNotImplementInterface{}
 
-		@Override
-		public JsonObject load(String configFilePath) throws Exception {
-			return new JsonObject("{\"status\":\"success\"}");
-		}
-	}
-	
-	public static class ConfigLoaderStubThatDoesNotImplementInterface{}
+  private class ConfigLoaderStubThatIsNotInstantiable implements ConfigurationLoader {
 
-	private class ConfigLoaderStubThatIsNotInstantiable implements ConfigurationLoader{
-
-		@Override
-		public JsonObject load(String configFilePath) throws Exception {
-			return new JsonObject("{\"status\":\"success\"}");
-		}
-	}
+    @Override
+    public JsonObject load(String configFilePath) throws Exception {
+      return new JsonObject("{\"status\":\"success\"}");
+    }
+  }
 }
