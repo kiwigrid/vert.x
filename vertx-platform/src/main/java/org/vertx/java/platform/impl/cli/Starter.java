@@ -23,6 +23,7 @@ import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.platform.PlatformLocator;
 import org.vertx.java.platform.PlatformManager;
+import org.vertx.java.platform.configuration.ConfigurationLoader;
 import org.vertx.java.platform.impl.Args;
 import org.vertx.java.platform.impl.resolver.HttpResolution;
 
@@ -62,7 +63,9 @@ public class Starter {
   private static Queue<Runnable> afterShutdownTasks = new ConcurrentLinkedQueue<>();
 
   private final CountDownLatch stopLatch = new CountDownLatch(1);
-
+    
+  protected Starter(){}
+    
   private Starter(String[] sargs) {
 
     Args args = new Args(sargs);
@@ -296,24 +299,20 @@ public class Starter {
       instances = 1;
     }
 
-    String configFile = args.map.get("-conf");
-    JsonObject conf;
-
-    if (configFile != null) {
-      try (Scanner scanner = new Scanner(new File(configFile)).useDelimiter("\\A")){
-        String sconf = scanner.next();
-        try {
-          conf = new JsonObject(sconf);
-        } catch (DecodeException e) {
-          log.error("Configuration file does not contain a valid JSON object");
-          return;
-        }
-      } catch (FileNotFoundException e) {
-        log.error("Config file " + configFile + " does not exist");
-        return;
-      }
-    } else {
-      conf = null;
+    JsonObject conf = null;
+    try{
+      String configFilePath = args.map.get("-conf");
+      String customConfigLoader = args.map.get("-confloader");
+      conf = loadConfigurationJson(configFilePath, customConfigLoader);
+    } catch (DecodeException e) {
+      log.error("Configuration file does not contain a valid JSON object");
+      return;
+    } catch (FileNotFoundException e) {
+      log.error("Config file does not exist", e);
+      return;
+    } catch (Exception e) {
+      log.error("Could not load configuration file", e);
+      return;
     }
 
     // Convert classpath to URL[]
@@ -376,6 +375,56 @@ public class Starter {
     block();
   }
 
+  protected JsonObject loadConfigurationJson(String configFilePath, String customConfigLoader) throws FileNotFoundException, DecodeException, Exception {
+    if (configFilePath != null) {
+      if (customConfigLoader != null) {
+        return getCustomConfigurationLoader(customConfigLoader).load(configFilePath);
+      } else {
+        return loadWithDefaultLoader(configFilePath);
+      }
+    } else {
+      return null;
+    }
+  }
+
+  private JsonObject loadWithDefaultLoader(String configFilePath) throws FileNotFoundException {
+    String configContent = loadConfig(configFilePath);
+    return new JsonObject(configContent);
+  }
+
+  private String loadConfig(String configFilePath) throws FileNotFoundException {
+    String configContent;
+    try (Scanner scanner = new Scanner(new File(configFilePath)).useDelimiter("\\A")) {
+      configContent = scanner.next();
+    } 
+    return configContent;
+  }
+
+  private ConfigurationLoader getCustomConfigurationLoader(String configLoader) {
+    Class<?> clazz;
+    try {
+      clazz = Class.forName(configLoader);
+    } catch (ClassNotFoundException e) {
+      log.error(String.format("Class %s could not be found", configLoader), e);
+      throw new IllegalArgumentException(e);
+    }
+    if (!ConfigurationLoader.class.isAssignableFrom(clazz)) {
+      String errorMessage = String.format("%s does not implement ConfigurationLoader interface", configLoader);
+      IllegalArgumentException e = new IllegalArgumentException(errorMessage);
+      log.error(String.format("%s does not implement ConfigurationLoader interface", configLoader), e);
+      throw e;
+    }
+    try {
+      return (ConfigurationLoader) clazz.newInstance();
+    } catch (InstantiationException | IllegalAccessException e) {
+      String errorMessage = String.format(
+                "%s does not have a public default constructor or cannot be instantiated (is it a abstract class?)",
+              configLoader);
+      log.error(errorMessage, e);
+      throw new IllegalArgumentException(e);
+    }
+  }
+
   private void block() {
     while (true) {
       try {
@@ -402,7 +451,7 @@ public class Starter {
           }
         });
         try {
-		  int undeployTimeout = Integer.getInteger("org.vertx.Starter.UNDEPLOY_TIMEOUT_SECONDS", 30);
+          int undeployTimeout = Integer.getInteger("org.vertx.Starter.UNDEPLOY_TIMEOUT_SECONDS", 30);
           log.info("Waiting for " + undeployTimeout + " seconds for undeployment...");
           if (!latch.await(undeployTimeout, TimeUnit.SECONDS)) {
             log.error("Timed out waiting to undeploy");
