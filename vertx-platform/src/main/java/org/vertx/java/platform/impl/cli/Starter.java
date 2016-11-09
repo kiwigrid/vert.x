@@ -305,7 +305,7 @@ public class Starter {
       if (configLoader != null) {
         try {  
           conf = getConfigurationLoader(configLoader).load(configFilePath);
-          } catch (Exception e) {
+        } catch (Exception e) {
           log.error("Could not load configuration file: " + configFilePath, e);  
           return;
         }
@@ -402,7 +402,7 @@ public class Starter {
     try {
       clazz = Class.forName(configLoader);
     } catch (ClassNotFoundException e) {
-      log.error(String.format("%s could not be found"), e);
+      log.error(String.format("Class %s could not be found", configLoader), e);
       throw new IllegalArgumentException(e);
     }
     if (!ConfigurationLoader.class.isAssignableFrom(clazz)) {
