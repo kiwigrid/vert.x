@@ -40,7 +40,7 @@ import java.util.Queue;
  *
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
-class Session extends SockJSSocketBase implements Shareable {
+public class Session extends SockJSSocketBase implements Shareable {
 
   private static final Logger log = LoggerFactory.getLogger(Session.class);
   private final Map<String, Session> sessions;
@@ -373,5 +373,9 @@ class Session extends SockJSSocketBase implements Shareable {
     this.remoteAddress = remoteAddress;
     this.uri = uri;
     this.headers = BaseTransport.removeCookieHeaders(headers);
+  }
+
+  public String getId() {
+    return id;
   }
 }
