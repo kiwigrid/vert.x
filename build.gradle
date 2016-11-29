@@ -18,6 +18,13 @@ apply from: 'gradle/extra-tasks.gradle'
 
 buildscript {
   repositories {
+	mavenCentral()
+	maven {
+		url 'https://oss.sonatype.org/content/repositories/snapshots'
+	}
+	maven {
+		url "https://plugins.gradle.org/m2/"
+	}
     flatDir {
       dir 'extralibs'
     }
@@ -37,15 +44,13 @@ buildscript {
         }
       }
     }
-    maven { url 'https://oss.sonatype.org/content/repositories/snapshots' }
-    mavenCentral()
   }
   dependencies {
-    classpath 'com.eriwen:gradle-js-plugin:1.1'
+    classpath "com.eriwen:gradle-js-plugin:2.14.1"
   }
 }
 
-apply plugin: 'js'
+apply plugin: "com.eriwen.gradle.js"
 
 allprojects {
   apply plugin: 'eclipse'

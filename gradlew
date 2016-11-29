@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ##############################################################################
 ##
@@ -8,23 +8,6 @@
 
 # Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 DEFAULT_JVM_OPTS=""
-
-## Add proxy (http/https) setting if present in environment variables (http_proxy/https_proxy)
-SS_HTTP_PROXY_HOST=${http_proxy%:*}
-SS_HTTP_PROXY_HOST=${SS_HTTP_PROXY_HOST##*/}
-SS_HTTP_PROXY_PORT=${http_proxy##*:}
-SS_HTTP_PROXY_PORT=${SS_HTTP_PROXY_PORT%%/*}
-if [ ! -z "$SS_HTTP_PROXY_HOST" ] ; then
-    GRADLE_OPTS=$GRADLE_OPTS" -Dhttp.proxyHost=${SS_HTTP_PROXY_HOST} -Dhttp.proxyPort=${SS_HTTP_PROXY_PORT}"
-fi
-
-SS_HTTPS_PROXY_HOST=${https_proxy%:*}
-SS_HTTPS_PROXY_HOST=${SS_HTTPS_PROXY_HOST##*/}
-SS_HTTPS_PROXY_PORT=${https_proxy##*:}
-SS_HTTPS_PROXY_PORT=${SS_HTTPS_PROXY_PORT%%/*}
-if [ ! -z "$SS_HTTPS_PROXY_HOST" ] ; then
-    GRADLE_OPTS=$GRADLE_OPTS" -Dhttps.proxyHost=${SS_HTTPS_PROXY_HOST} -Dhttps.proxyPort=${SS_HTTPS_PROXY_PORT}"
-fi
 
 APP_NAME="Gradle"
 APP_BASE_NAME=`basename "$0"`
@@ -59,11 +42,6 @@ case "`uname`" in
     ;;
 esac
 
-# For Cygwin, ensure paths are in UNIX format before anything is touched.
-if $cygwin ; then
-    [ -n "$JAVA_HOME" ] && JAVA_HOME=`cygpath --unix "$JAVA_HOME"`
-fi
-
 # Attempt to set APP_HOME
 # Resolve links: $0 may be a link
 PRG="$0"
@@ -78,9 +56,9 @@ while [ -h "$PRG" ] ; do
     fi
 done
 SAVED="`pwd`"
-cd "`dirname \"$PRG\"`/" >&-
+cd "`dirname \"$PRG\"`/" >/dev/null
 APP_HOME="`pwd -P`"
-cd "$SAVED" >&-
+cd "$SAVED" >/dev/null
 
 CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
 
@@ -118,11 +96,8 @@ if [ "$cygwin" = "false" -a "$darwin" = "false" ] ; then
             warn "Could not set maximum file descriptor limit: $MAX_FD"
         fi
     else
-        warn "Could not query businessSystem maximum file descriptor limit: $MAX_FD_LIMIT"
+        warn "Could not query maximum file descriptor limit: $MAX_FD_LIMIT"
     fi
-
-    # set umask to sane default for FileSystem tests
-    umask 0022
 fi
 
 # For Darwin, add options to specify how the application appears in the dock
@@ -134,6 +109,7 @@ fi
 if $cygwin ; then
     APP_HOME=`cygpath --path --mixed "$APP_HOME"`
     CLASSPATH=`cygpath --path --mixed "$CLASSPATH"`
+    JAVACMD=`cygpath --unix "$JAVACMD"`
 
     # We build the pattern for arguments to be converted via cygpath
     ROOTDIRSRAW=`find -L / -maxdepth 1 -mindepth 1 -type d 2>/dev/null`
@@ -181,4 +157,4 @@ function splitJvmOpts() {
 eval splitJvmOpts $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS
 JVM_OPTS[${#JVM_OPTS[*]}]="-Dorg.gradle.appname=$APP_BASE_NAME"
 
-exec "$JAVACMD" "${JVM_OPTS[@]}" -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain --daemon "$@"
+exec "$JAVACMD" "${JVM_OPTS[@]}" -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
